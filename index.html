@@ -1286,6 +1286,73 @@ table.grid {
 }
 .params-unit { font-size: 13px; color: #6b7280; }
 
+/* Aide-mémoire raccourcis */
+.shortcuts-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.shortcuts-table tr { border-bottom: 0.5px solid var(--border); }
+.shortcuts-key { padding: 9px 8px; white-space: nowrap; width: 1%; }
+.shortcuts-desc { padding: 9px 8px; font-size: 13px; color: var(--text-2); }
+.shortcuts-table kbd {
+  display: inline-block; min-width: 20px; text-align: center;
+  padding: 2px 7px; font-family: var(--font-sans); font-size: 12px;
+  font-weight: 600; color: var(--text);
+  background: var(--surface-2); border: 1px solid var(--border-strong);
+  border-radius: 5px; box-shadow: 0 1px 0 var(--border-strong);
+}
+.shortcuts-note { font-size: 12px; color: var(--text-3); margin: 12px 2px 0; }
+
+/* Recherche d'un salarié dans le planning */
+.emp-search { position: relative; display: flex; align-items: center; gap: 6px; }
+.emp-search-input { min-width: 150px; }
+.emp-search-clear {
+  border: none; background: var(--surface-2); color: var(--text-2);
+  width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+  font-size: 12px; flex-shrink: 0;
+}
+.emp-search-clear:hover { background: var(--border); }
+.emp-search-hours {
+  font-size: 12px; color: var(--text-2); white-space: nowrap;
+  background: var(--surface-2); padding: 4px 9px; border-radius: 7px;
+}
+.emp-search-hours b { color: var(--accent); }
+.emp-search-hours--over b { color: var(--danger); }
+.emp-search-list {
+  position: absolute; top: 100%; left: 0; margin-top: 4px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-md);
+  z-index: 60; min-width: 200px; overflow: hidden;
+}
+.emp-search-opt {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 12px; font-size: 13px; cursor: pointer; color: var(--text);
+}
+.emp-search-opt:hover { background: var(--surface-2); }
+.emp-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+/* Surlignage des cellules lors d'une recherche */
+.cell--search-hit {
+  outline: 3px solid var(--gold); outline-offset: -3px;
+  position: relative; z-index: 1;
+}
+.cell--search-dim { opacity: .3; }
+
+/* Contrôle de caisse */
+.cash-ctrl { display: flex; flex-direction: column; gap: 2px; }
+.cash-ctrl-line {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 4px; font-size: 13px; color: var(--text-2);
+  border-bottom: 0.5px solid var(--border);
+}
+.cash-ctrl-line b { color: var(--text); font-size: 14px; }
+.cash-ctrl-res {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 14px; margin-top: 10px; border-radius: var(--radius);
+  font-size: 14px; font-weight: 600;
+}
+.cash-ctrl-res b { font-size: 18px; }
+.cash-ctrl-res.cc-ok { background: var(--success-soft); color: var(--success); }
+.cash-ctrl-res.cc-warn { background: var(--warn-soft); color: #8a6d1f; }
+.cash-ctrl-res.cc-bad { background: var(--danger-soft); color: var(--danger); }
+.cash-ctrl-note { font-size: 12px; color: var(--text-3); margin-top: 6px; padding: 0 4px; }
+
 /* Bandeau de complétude du coût main-d'œuvre */
 .cost-banner {
   display: flex;
@@ -3640,7 +3707,7 @@ document.addEventListener('keydown', ev => {
       else if (key === 'r') { S.recap = !S.recap; render(); }
       else if (key === 's') { openSaisie(); }
       else if (key === 'c') { S.view = 'caisse'; render(); }
-      else if (ev.key === '?') { startTour(); }
+      else if (key === 'h' || ev.key === '?') { S.modal = { type: 'shortcuts' }; render(); }
     }
   }
 });
@@ -4780,18 +4847,13 @@ function emptyDaily() {
 /* Total des encaissements Clyo (théorique). */
 function totalClyo(dd) {
   if (!dd || !dd.clyo) return 0;
-  const c = dd.clyo;
-  return (c.esp || 0) + (c.chq || 0) + (c.cb || 0)
-       + (c.ancv || 0) + (c.vrmnt || 0) + (c.cpt || 0);
+  return Object.keys(dd.clyo).reduce((s, k) => s + (dd.clyo[k] || 0), 0);
 }
 
 /* Total recette réel (caisse). Les dépenses s'ajoutent (sorties documentées). */
 function totalReel(dd) {
   if (!dd || !dd.reel) return 0;
-  const r = dd.reel;
-  return (r.cb || 0) + (r.vad || 0) + (r.amex || 0) + (r.ancv || 0)
-       + (r.cbanque || 0) + (r.esp || 0) + (r.encaisser || 0)
-       + (r.bons || 0) + (r.credit || 0) + (r.acompte || 0) + (r.depenses || 0);
+  return Object.keys(dd.reel).reduce((s, k) => s + (dd.reel[k] || 0), 0);
 }
 
 /* Un jour a-t-il des données de caisse saisies ? */
@@ -6799,7 +6861,7 @@ function rSidebar() {
 
   const footItems = [
     { icon: '⚙', label: 'Paramètres', active: S.view === 'params', fn: () => { S.view = 'params'; S.modal = null; render(); } },
-    { icon: '❓', label: 'Aide', fn: () => { startTour(); } }
+    { icon: '⌨', label: 'Raccourcis', fn: () => { S.modal = { type: 'shortcuts' }; render(); } }
   ];
   footItems.forEach(it => {
     const btn = document.createElement('button');
@@ -6961,6 +7023,75 @@ function rHdr() {
       { icon: '🖨', txt: 'Imprimer', fn: () => { printPlanning(); } }
     ]}
   ];
+
+  // Champ de recherche d'un salarié (planning uniquement) : surligne ses
+  // affectations du mois et estompe le reste.
+  if (S.view === 'month' || S.view === 'week') {
+    const searchWrap = document.createElement('div');
+    searchWrap.className = 'emp-search';
+    const sInput = document.createElement('input');
+    sInput.type = 'text';
+    sInput.className = 'form-input--sm emp-search-input';
+    sInput.placeholder = '🔍 Voir un salarié…';
+    if (S.searchEmp) {
+      const e = findEmp(S.searchEmp);
+      if (e) sInput.value = e.n;
+    }
+    const sList = document.createElement('div');
+    sList.className = 'emp-search-list';
+    sList.style.display = 'none';
+    const refreshList = () => {
+      const q = sInput.value.trim().toLowerCase();
+      sList.innerHTML = '';
+      if (!q) {
+        if (S.searchEmp) { S.searchEmp = null; render(); }
+        sList.style.display = 'none';
+        return;
+      }
+      const matches = S.emps.filter(e => e.n.toLowerCase().indexOf(q) >= 0);
+      matches.slice(0, 8).forEach(e => {
+        const col = eColor(e.id);
+        const row = document.createElement('div');
+        row.className = 'emp-search-opt';
+        row.innerHTML = "<span class='emp-dot' style='background:" + col.bg +
+          ';border:2px solid ' + col.text + "'></span>" + e.n;
+        row.onclick = () => { S.searchEmp = e.id; render(); };
+        sList.appendChild(row);
+      });
+      sList.style.display = matches.length ? 'block' : 'none';
+    };
+    sInput.oninput = refreshList;
+    sInput.onfocus = refreshList;
+    sInput.onblur = () => setTimeout(() => { sList.style.display = 'none'; }, 150);
+    if (S.searchEmp) {
+      const clr = document.createElement('button');
+      clr.className = 'emp-search-clear';
+      clr.textContent = '✕';
+      clr.title = 'Effacer la recherche';
+      clr.onclick = () => { S.searchEmp = null; render(); };
+      searchWrap.appendChild(sInput);
+      searchWrap.appendChild(clr);
+      // Total d'heures du salarié recherché ce mois
+      const e = findEmp(S.searchEmp);
+      if (e) {
+        const h = empRealHoursMonth(S.y, S.m, S.searchEmp);
+        const badge = document.createElement('span');
+        badge.className = 'emp-search-hours';
+        const contrat = e.h || 0;
+        const over = contrat && h > contrat;
+        badge.innerHTML = '<b>' + (Math.round(h * 10) / 10) + 'h</b>' +
+          (contrat ? ' / ' + contrat + 'h' : '');
+        if (over) badge.classList.add('emp-search-hours--over');
+        badge.title = 'Heures réelles ce mois' +
+          (contrat ? ' vs contrat' : '');
+        searchWrap.appendChild(badge);
+      }
+    } else {
+      searchWrap.appendChild(sInput);
+    }
+    searchWrap.appendChild(sList);
+    actions.appendChild(searchWrap);
+  }
 
   // Rendu des boutons principaux
   primaryDefs.forEach(def => {
@@ -7923,6 +8054,11 @@ function rGrid() {
           eName(empId) + overDot + '</span>';
         td.dataset.eid = empId;
         td.draggable = true;
+        // Surlignage recherche : met en avant le salarié cherché, estompe le reste
+        if (S.searchEmp) {
+          if (empId === S.searchEmp) td.classList.add('cell--search-hit');
+          else td.classList.add('cell--search-dim');
+        }
       } else if (closed) {
         // Jour fermé : cellule désactivée
         td.innerHTML = '';
@@ -8274,6 +8410,7 @@ function rModal() {
   else if (type === 'paie')             mPaie(box);
   else if (type === 'saisie')           mSaisie(box);
   else if (type === 'saisie_synth')     mSaisieSynth(box);
+  else if (type === 'shortcuts')        mShortcuts(box);
   return box;
 }
 
@@ -8283,6 +8420,41 @@ function mBtn(label, primary, onClick) {
   btn.innerHTML = label;
   btn.onclick = onClick;
   return btn;
+}
+
+/* Aide-mémoire des raccourcis clavier. */
+function mShortcuts(box) {
+  mHdr(box, '⌨ Raccourcis clavier');
+  const list = [
+    ['←  →', 'Mois précédent / suivant'],
+    ['G', 'Auto-générer le planning'],
+    ['S', 'Saisie du jour'],
+    ['E', 'Vue Équipe'],
+    ['C', 'Vue Caisse & CA'],
+    ['A', 'Absences / indisponibilités'],
+    ['R', 'Afficher / masquer le récapitulatif'],
+    ['H  ?', 'Afficher cette aide'],
+    ['Échap', 'Fermer une fenêtre']
+  ];
+  const tbl = document.createElement('table');
+  tbl.className = 'shortcuts-table';
+  list.forEach(([k, d]) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      "<td class='shortcuts-key'><kbd>" +
+      k.split(/\s+/).join('</kbd> <kbd>') + '</kbd></td>' +
+      "<td class='shortcuts-desc'>" + d + '</td>';
+    tbl.appendChild(tr);
+  });
+  box.appendChild(tbl);
+  const note = document.createElement('p');
+  note.className = 'shortcuts-note';
+  note.textContent = 'Les raccourcis sont inactifs pendant la saisie dans un champ.';
+  box.appendChild(note);
+  const foot = document.createElement('div');
+  foot.className = 'modal-foot--end-only';
+  foot.appendChild(mBtn('Fermer', false, closeModal));
+  box.appendChild(foot);
 }
 
 function mHdr(box, title) {
@@ -11989,20 +12161,20 @@ function mSaisie(box, asView) {
   const encBody = document.createElement('tbody');
 
   const encRows = [
-    { clyoKey: 'esp',   reelKey: 'esp',       label: 'Espèces' },
-    { clyoKey: 'cb',    reelKey: 'cb',        label: 'CB' },
-    { clyoKey: null,    reelKey: 'amex',      label: 'AMEX' },
-    { clyoKey: 'chq',   reelKey: null,        label: 'Chèques' },
-    { clyoKey: 'ancv',  reelKey: 'ancv',      label: 'ANCV / Ch. vacances' },
-    { clyoKey: 'vrmnt', reelKey: null,        label: 'Virement' },
-    { clyoKey: null,    reelKey: 'vad',       label: 'VAD' },
-    { clyoKey: null,    reelKey: 'cbanque',   label: 'Chèque banque' },
-    { clyoKey: 'cpt',   reelKey: null,        label: 'Client en compte' },
-    { clyoKey: null,    reelKey: 'encaisser', label: 'À encaisser' },
-    { clyoKey: null,    reelKey: 'bons',      label: 'Bons cadeaux' },
-    { clyoKey: null,    reelKey: 'credit',    label: 'Crédit' },
-    { clyoKey: null,    reelKey: 'acompte',   label: 'Acompte' },
-    { clyoKey: null,    reelKey: 'depenses',  label: 'Dépenses' }
+    { key: 'esp',      label: 'Espèces' },
+    { key: 'cb',       label: 'CB' },
+    { key: 'amex',     label: 'AMEX' },
+    { key: 'chq',      label: 'Chèques' },
+    { key: 'ancv',     label: 'ANCV / Ch. vacances' },
+    { key: 'vrmnt',    label: 'Virement' },
+    { key: 'vad',      label: 'VAD' },
+    { key: 'cbanque',  label: 'Chèque banque' },
+    { key: 'cpt',      label: 'Client en compte' },
+    { key: 'encaisser', label: 'À encaisser' },
+    { key: 'bons',     label: 'Bons cadeaux' },
+    { key: 'credit',   label: 'Crédit' },
+    { key: 'acompte',  label: 'Acompte' },
+    { key: 'depenses', label: 'Dépenses' }
   ];
 
   encRows.forEach(row => {
@@ -12013,23 +12185,13 @@ function mSaisie(box, asView) {
     tr.appendChild(lblTd);
 
     const clyoTd = document.createElement('td');
-    if (row.clyoKey) {
-      clyoTd.appendChild(
-        numInput('clyo_' + row.clyoKey, (dd.clyo || {})[row.clyoKey], 'enc-clyo'));
-    } else {
-      clyoTd.className = 'saisie-na';
-      clyoTd.textContent = '—';
-    }
+    clyoTd.appendChild(
+      numInput('clyo_' + row.key, (dd.clyo || {})[row.key], 'enc-clyo'));
     tr.appendChild(clyoTd);
 
     const reelTd = document.createElement('td');
-    if (row.reelKey) {
-      reelTd.appendChild(
-        numInput('reel_' + row.reelKey, (dd.reel || {})[row.reelKey], 'enc-reel'));
-    } else {
-      reelTd.className = 'saisie-na';
-      reelTd.textContent = '—';
-    }
+    reelTd.appendChild(
+      numInput('reel_' + row.key, (dd.reel || {})[row.key], 'enc-reel'));
     tr.appendChild(reelTd);
     encBody.appendChild(tr);
   });
@@ -12053,14 +12215,10 @@ function mSaisie(box, asView) {
   function recalcEnc() {
     let tc = 0, tr = 0;
     encRows.forEach(row => {
-      if (row.clyoKey) {
-        const v = parseFloat((document.getElementById('clyo_' + row.clyoKey) || {}).value);
-        if (!isNaN(v)) tc += v;
-      }
-      if (row.reelKey) {
-        const v = parseFloat((document.getElementById('reel_' + row.reelKey) || {}).value);
-        if (!isNaN(v)) tr += v;
-      }
+      const vc = parseFloat((document.getElementById('clyo_' + row.key) || {}).value);
+      if (!isNaN(vc)) tc += vc;
+      const vr = parseFloat((document.getElementById('reel_' + row.key) || {}).value);
+      if (!isNaN(vr)) tr += vr;
     });
     const tcEl = document.getElementById('enc-tot-clyo');
     const trEl = document.getElementById('enc-tot-reel');
@@ -12076,21 +12234,90 @@ function mSaisie(box, asView) {
   }
   setTimeout(() => {
     encRows.forEach(row => {
-      if (row.clyoKey) {
-        const el = document.getElementById('clyo_' + row.clyoKey);
-        if (el) el.oninput = recalcEnc;
-      }
-      if (row.reelKey) {
-        const el = document.getElementById('reel_' + row.reelKey);
-        if (el) el.oninput = recalcEnc;
-      }
+      const ec = document.getElementById('clyo_' + row.key);
+      if (ec) ec.oninput = recalcEnc;
+      const er = document.getElementById('reel_' + row.key);
+      if (er) er.oninput = recalcEnc;
     });
     recalcEnc();
   }, 50);
 
   form.appendChild(b4);
 
-  // BLOC 5 — Observations
+  // BLOC 4bis — Contrôle de caisse
+  // Différence = (CA réel caisse − CA déclaré serveurs) − (fond veille − fond jour)
+  const bCtrl = saisieBlock('🔎 Contrôle de caisse');
+  const ctrlBox = document.createElement('div');
+  ctrlBox.className = 'cash-ctrl';
+  ctrlBox.innerHTML =
+    "<div class='cash-ctrl-line'><span>CA réel (caisse)</span>" +
+      "<b id='cc-reel'>—</b></div>" +
+    "<div class='cash-ctrl-line'><span>CA déclaré (serveurs)</span>" +
+      "<b id='cc-decl'>—</b></div>" +
+    "<div class='cash-ctrl-line'><span>Variation fonds de caisse " +
+      "(jour − veille)</span><b id='cc-fdc'>—</b></div>" +
+    "<div class='cash-ctrl-res' id='cc-res-wrap'>" +
+      "<span>Différence</span><b id='cc-res'>—</b></div>" +
+    "<div class='cash-ctrl-note' id='cc-note'></div>";
+  bCtrl.appendChild(ctrlBox);
+  form.appendChild(bCtrl);
+
+  function recalcControle() {
+    // CA réel = total colonne Réel
+    let caReel = 0, hasReel = false;
+    encRows.forEach(row => {
+      if (row.key === 'encaisser') return; // exclu du contrôle de caisse
+      const v = parseFloat((document.getElementById('reel_' + row.key) || {}).value);
+      if (!isNaN(v)) { caReel += v; hasReel = true; }
+    });
+    // CA déclaré = somme des CA serveurs
+    let caDecl = 0, hasDecl = false;
+    saisieCtx()._presentIds.forEach(eid => {
+      const el = document.getElementById('sv_ca_' + eid);
+      if (el) { const v = parseFloat(el.value); if (!isNaN(v)) { caDecl += v; hasDecl = true; } }
+    });
+    const fv = parseFloat((document.getElementById('fdcVeille') || {}).value) || 0;
+    const fj = parseFloat((document.getElementById('fdcJour') || {}).value) || 0;
+    const varFond = fj - fv;
+    const diff = (caReel - caDecl) + varFond;
+
+    const eur2 = (n) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+    const set = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+    set('cc-reel', hasReel ? eur2(caReel) : '—');
+    set('cc-decl', hasDecl ? eur2(caDecl) : '—');
+    set('cc-fdc', (varFond >= 0 ? '+' : '') + eur2(varFond));
+    const resEl = document.getElementById('cc-res');
+    const wrap = document.getElementById('cc-res-wrap');
+    const note = document.getElementById('cc-note');
+    if (resEl) resEl.textContent = (diff > 0 ? '+' : '') + eur2(diff);
+    if (wrap) {
+      wrap.classList.remove('cc-ok', 'cc-warn', 'cc-bad');
+      const a = Math.abs(diff);
+      wrap.classList.add(a < 0.01 ? 'cc-ok' : a < 5 ? 'cc-warn' : 'cc-bad');
+    }
+    if (note) {
+      const a = Math.abs(diff);
+      note.textContent = a < 0.01 ? '✓ Caisse juste'
+        : diff > 0 ? 'Excédent en caisse de ' + eur2(a)
+        : 'Manque en caisse de ' + eur2(a);
+    }
+  }
+  // Brancher le recalcul sur tous les champs concernés
+  setTimeout(() => {
+    encRows.forEach(row => {
+      const er = document.getElementById('reel_' + row.key);
+      if (er) { const prev = er.oninput; er.oninput = (e) => { if (prev) prev(e); recalcControle(); }; }
+    });
+    ['fdcVeille', 'fdcJour'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.oninput = recalcControle;
+    });
+    saisieCtx()._presentIds.forEach(eid => {
+      const el = document.getElementById('sv_ca_' + eid);
+      if (el) { const prev = el.oninput; el.oninput = (e) => { if (prev) prev(e); recalcControle(); }; }
+    });
+    recalcControle();
+  }, 60);
   const b5 = saisieBlock('📝 Observations');
   const obs = document.createElement('textarea');
   obs.id = 'saisie_obs';
@@ -12371,15 +12598,20 @@ function saveSaisieForm(box, d) {
   }
 
   dd.clyo = {
-    esp: getNum('clyo_esp'), chq: getNum('clyo_chq'), cb: getNum('clyo_cb'),
-    ancv: getNum('clyo_ancv'), vrmnt: getNum('clyo_vrmnt'), cpt: getNum('clyo_cpt')
+    esp: getNum('clyo_esp'), cb: getNum('clyo_cb'), amex: getNum('clyo_amex'),
+    chq: getNum('clyo_chq'), ancv: getNum('clyo_ancv'), vrmnt: getNum('clyo_vrmnt'),
+    vad: getNum('clyo_vad'), cbanque: getNum('clyo_cbanque'), cpt: getNum('clyo_cpt'),
+    encaisser: getNum('clyo_encaisser'), bons: getNum('clyo_bons'),
+    credit: getNum('clyo_credit'), acompte: getNum('clyo_acompte'),
+    depenses: getNum('clyo_depenses')
   };
   dd.reel = {
-    cb: getNum('reel_cb'), vad: getNum('reel_vad'), amex: getNum('reel_amex'),
-    ancv: getNum('reel_ancv'), cbanque: getNum('reel_cbanque'),
-    esp: getNum('reel_esp'), encaisser: getNum('reel_encaisser'),
-    bons: getNum('reel_bons'), credit: getNum('reel_credit'),
-    acompte: getNum('reel_acompte'), depenses: getNum('reel_depenses')
+    esp: getNum('reel_esp'), cb: getNum('reel_cb'), amex: getNum('reel_amex'),
+    chq: getNum('reel_chq'), ancv: getNum('reel_ancv'), vrmnt: getNum('reel_vrmnt'),
+    vad: getNum('reel_vad'), cbanque: getNum('reel_cbanque'), cpt: getNum('reel_cpt'),
+    encaisser: getNum('reel_encaisser'), bons: getNum('reel_bons'),
+    credit: getNum('reel_credit'), acompte: getNum('reel_acompte'),
+    depenses: getNum('reel_depenses')
   };
 
   const obsEl = document.getElementById('saisie_obs');
