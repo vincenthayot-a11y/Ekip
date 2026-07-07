@@ -1173,6 +1173,31 @@ table.grid {
 
 /* Liste déroulante d'heures */
 .saisie-time-sel { max-width: 90px; cursor: pointer; }
+.saisie-time-inp {
+  max-width: 90px; text-align: center; font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+}
+.saisie-time-inp::placeholder { color: #c7c7c7; }
+
+/* Raccourcis horaires fréquents */
+.saisie-quick { display: flex; gap: 3px; margin-top: 3px; flex-wrap: wrap; }
+.saisie-quick-btn {
+  font-size: 10px; padding: 1px 6px; border-radius: 6px;
+  border: 1px solid var(--border, #e5e7eb); background: #f8fafc;
+  color: var(--text-2, #6b7280); cursor: pointer; font-family: inherit;
+  white-space: nowrap;
+}
+.saisie-quick-btn:hover { background: var(--accent, #1B5E3F); color: #fff; border-color: transparent; }
+/* Bouton « idem » recopier ligne du dessus */
+.saisie-copy-cell { vertical-align: middle; }
+.saisie-copy-above {
+  font-size: 10px; padding: 3px 8px; border-radius: 7px;
+  border: 1px dashed var(--border-strong, #cbd5e1); background: transparent;
+  color: var(--text-2, #6b7280); cursor: pointer; font-family: inherit; white-space: nowrap;
+}
+.saisie-copy-above:hover { background: #f0f7f2; border-style: solid; color: var(--accent, #1B5E3F); }
+/* Barre pré-remplir depuis planning */
+.saisie-prefill-bar { margin-bottom: 10px; }
 
 /* Bouton retirer un présent */
 .saisie-remove-btn {
@@ -12124,29 +12149,82 @@ function exportPdf() {
 
 /* Génère un <select> d'horaires par tranches de 15 min de 6h00 à 2h00.
    value initiale en minutes depuis minuit (ou null). id pour récupération. */
-function timeSelect(id, valueMin) {
-  const sel = document.createElement('select');
-  sel.className = 'form-input--sm saisie-time-sel saisie-enter';
-  sel.id = id;
-
-  // Option vide
-  const empty = document.createElement('option');
-  empty.value = '';
-  empty.textContent = '—';
-  sel.appendChild(empty);
-
-  // De 6h00 à 26h00 (2h du matin) par pas de 15 min
-  for (let m = 6 * 60; m <= 26 * 60; m += 15) {
-    const real = m % (24 * 60);
-    const opt = document.createElement('option');
-    opt.value = m; // on stocke la valeur "linéaire" pour gérer après minuit
-    const h = Math.floor(real / 60);
-    const mn = real % 60;
-    opt.textContent = h + 'h' + (mn < 10 ? '0' : '') + mn;
-    if (valueMin != null && valueMin === real) opt.selected = true;
-    sel.appendChild(opt);
+/* Convertit une saisie libre d'heure en minutes réelles (0..1439) ou null.
+   Accepte : "845", "8h45", "8:45", "8.45", "8", "8h", "20h30", etc. */
+function parseTimeInput(raw) {
+  if (raw == null) return null;
+  let s = String(raw).trim().toLowerCase();
+  if (!s) return null;
+  s = s.replace(/[hH:.\s]/g, ':');
+  let h, mn;
+  if (s.indexOf(':') >= 0) {
+    const parts = s.split(':').filter(p => p !== '');
+    h = parseInt(parts[0], 10);
+    mn = parts.length > 1 ? parseInt(parts[1], 10) : 0;
+  } else {
+    // Chiffres collés : "845" → 8h45, "1230" → 12h30, "8" → 8h00
+    const digits = s.replace(/\D/g, '');
+    if (!digits) return null;
+    if (digits.length <= 2) { h = parseInt(digits, 10); mn = 0; }
+    else {
+      mn = parseInt(digits.slice(-2), 10);
+      h = parseInt(digits.slice(0, -2), 10);
+    }
   }
-  return sel;
+  if (isNaN(h)) return null;
+  if (isNaN(mn)) mn = 0;
+  if (h > 23) h = h % 24;
+  if (mn > 59) mn = 59;
+  return h * 60 + mn;
+}
+
+/* Formate des minutes réelles (0..1439) en "8h45". */
+function fmtTimeInput(realMin) {
+  if (realMin == null) return '';
+  const h = Math.floor(realMin / 60);
+  const mn = realMin % 60;
+  return h + 'h' + (mn < 10 ? '0' : '') + mn;
+}
+
+/* Lit la valeur d'un champ heure (texte libre) → minutes réelles ou null. */
+function readTimeField(el) {
+  if (!el) return null;
+  if (el.dataset && el.dataset.min !== undefined && el.dataset.min !== '') {
+    const v = parseInt(el.dataset.min, 10);
+    if (!isNaN(v)) return v;
+  }
+  return parseTimeInput(el.value);
+}
+
+/* Champ de saisie d'heure en texte libre : on tape "845" → devient "8h45".
+   Stocke les minutes réelles dans data-min pour une lecture fiable. */
+function timeSelect(id, valueMin) {
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.className = 'form-input--sm saisie-time-inp saisie-enter';
+  inp.id = id;
+  inp.autocomplete = 'off';
+  inp.inputMode = 'numeric';
+  inp.placeholder = '—';
+  if (valueMin != null) {
+    inp.value = fmtTimeInput(valueMin);
+    inp.dataset.min = valueMin;
+  } else {
+    inp.dataset.min = '';
+  }
+  // Normalise à la sortie du champ : "845" → "8h45"
+  const normalize = () => {
+    const m = parseTimeInput(inp.value);
+    if (m == null) { inp.value = ''; inp.dataset.min = ''; }
+    else { inp.value = fmtTimeInput(m); inp.dataset.min = m; }
+  };
+  inp.addEventListener('blur', normalize);
+  // Met à jour data-min en direct pour les recalculs instantanés
+  inp.addEventListener('input', () => {
+    const m = parseTimeInput(inp.value);
+    inp.dataset.min = (m == null ? '' : m);
+  });
+  return inp;
 }
 
 /* Active la navigation au clavier : Entrée → focus sur le champ suivant.
@@ -12191,6 +12269,7 @@ function saisieCtx() {
 /* Ouvre la saisie du jour en VUE pleine page (plus de pop-up). */
 function openSaisie(d) {
   const now = new Date();
+  S._freqTimes = null; // recalcul des horaires fréquents à chaque ouverture
   const def = (now.getFullYear() === S.y && now.getMonth() === S.m)
     ? now.getDate() : 1;
   // Mémorise l'écran d'origine pour y revenir (planning, caisse…).
@@ -12235,6 +12314,96 @@ function rSaisie() {
   S._saisieCtx._asView = true;
   mSaisie(outer, true);
   return outer;
+}
+
+/* Retourne les horaires (arr et dep) les plus fréquents dans l'historique,
+   pour proposer des raccourcis. Fallback sur des valeurs typiques. */
+function frequentTimes() {
+  const arrCount = {}, depCount = {};
+  Object.keys(S.real || {}).forEach(mk => {
+    const days = S.real[mk];
+    Object.keys(days).forEach(day => {
+      Object.keys(days[day]).forEach(eid => {
+        const r = days[day][eid];
+        if (r && r.arr != null) arrCount[r.arr] = (arrCount[r.arr] || 0) + 1;
+        if (r && r.dep != null) depCount[r.dep] = (depCount[r.dep] || 0) + 1;
+      });
+    });
+  });
+  const top = (obj, fallback) => {
+    const arr = Object.keys(obj).map(k => [parseInt(k, 10), obj[k]])
+      .sort((a, b) => b[1] - a[1]).slice(0, 3).map(x => x[0]);
+    return arr.length ? arr : fallback;
+  };
+  return {
+    arr: top(arrCount, [8 * 60 + 45, 9 * 60, 11 * 60]),
+    dep: top(depCount, [14 * 60 + 30, 15 * 60, 23 * 60])
+  };
+}
+
+/* Boutons de raccourcis d'horaires fréquents sous un champ heure. */
+function buildQuickTimes(inputEl, col) {
+  const wrap = document.createElement('div');
+  wrap.className = 'saisie-quick';
+  const freq = S._freqTimes || (S._freqTimes = frequentTimes());
+  (col === 'arr' ? freq.arr : freq.dep).forEach(min => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'saisie-quick-btn';
+    b.textContent = fmtTimeInput(min);
+    b.tabIndex = -1;
+    b.onclick = () => {
+      inputEl.value = fmtTimeInput(min);
+      inputEl.dataset.min = min;
+      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+      inputEl.dispatchEvent(new Event('blur', { bubbles: true }));
+    };
+    wrap.appendChild(b);
+  });
+  return wrap;
+}
+
+/* Navigation verticale ↑/↓ entre champs heures de même colonne. */
+function moveVertical(el, dir) {
+  const col = el.dataset.col;
+  const all = Array.prototype.slice.call(
+    document.querySelectorAll('.saisie-time-inp[data-col="' + col + '"]'));
+  const i = all.indexOf(el);
+  if (i < 0) return;
+  const next = all[i + dir];
+  if (next) { next.focus(); try { next.select(); } catch (e) { /* select */ } }
+}
+
+/* Trouve l'horaire de la ligne (tr) précédente ayant des champs heures. */
+function findPrevRowTimes(tr) {
+  let row = tr.previousElementSibling;
+  while (row) {
+    const arr = row.querySelector('.saisie-time-inp[data-col="arr"]');
+    const dep = row.querySelector('.saisie-time-inp[data-col="dep"]');
+    if (arr || dep) {
+      return {
+        arr: arr ? arr.value : '', arrMin: arr ? arr.dataset.min : '',
+        dep: dep ? dep.value : '', depMin: dep ? dep.dataset.min : ''
+      };
+    }
+    row = row.previousElementSibling;
+  }
+  return null;
+}
+
+/* Enregistrement automatique (debounce) pendant la saisie. */
+function scheduleAutosave() {
+  if (S._autosaveT) clearTimeout(S._autosaveT);
+  S._autosaveT = setTimeout(() => {
+    const box = document.querySelector('.saisie-form');
+    if (box && (S.view === 'saisie' || S.modal)) {
+      const day = (S.view === 'saisie') ? S.saisieDay : (S.modal && S.modal.day);
+      if (day != null) {
+        saveSaisieForm(box, day);
+        setSaveStatus(GAS_URL ? 'saving' : 'local');
+      }
+    }
+  }, 1200);
 }
 
 function mSaisie(box, asView) {
@@ -12429,26 +12598,64 @@ function mSaisie(box, asView) {
     const r = getReal(S.y, S.m, d, eid);
     const arrTd = document.createElement('td');
     const arrSel = timeSelect('hr_arr_' + eid, r && r.arr != null ? r.arr : null);
+    arrSel.dataset.col = 'arr';
     arrTd.appendChild(arrSel);
+    // Boutons horaires fréquents sous le champ arrivée
+    arrTd.appendChild(buildQuickTimes(arrSel, 'arr'));
+
     const depTd = document.createElement('td');
     const depSel = timeSelect('hr_dep_' + eid, r && r.dep != null ? r.dep : null);
+    depSel.dataset.col = 'dep';
     depTd.appendChild(depSel);
+    depTd.appendChild(buildQuickTimes(depSel, 'dep'));
+
     const totTd = document.createElement('td');
     totTd.className = 'saisie-total';
     totTd.id = 'hr_tot_' + eid;
     totTd.textContent = r && r.total != null ? fmtDur(r.total) : '—';
     const recalc = () => {
-      const a = arrSel.value !== '' ? parseInt(arrSel.value, 10) : null;
-      const dp = depSel.value !== '' ? parseInt(depSel.value, 10) : null;
-      totTd.textContent = (a != null && dp != null && dp > a)
-        ? fmtDur(dp - a) : '—';
-      recalcTotaux();   // met à jour les alertes de cohérence
+      const a = readTimeField(arrSel);
+      const dp = readTimeField(depSel);
+      const dur = (a != null && dp != null && dp > a) ? dp - a : null;
+      totTd.textContent = (dur != null && dur > 0) ? fmtDur(dur) : '—';
+      recalcTotaux();
+      scheduleAutosave();
     };
-    arrSel.onchange = recalc;
-    depSel.onchange = recalc;
+    arrSel.addEventListener('input', recalc);
+    arrSel.addEventListener('blur', recalc);
+    depSel.addEventListener('input', recalc);
+    depSel.addEventListener('blur', recalc);
+    // Navigation flèches ↑ / ↓ entre lignes (même colonne)
+    [arrSel, depSel].forEach(el => {
+      el.addEventListener('keydown', (ev) => {
+        if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
+          ev.preventDefault();
+          moveVertical(el, ev.key === 'ArrowDown' ? 1 : -1);
+        }
+      });
+    });
+
+    // Bouton « même que dessus » : recopie l'horaire de la ligne précédente
+    const copyTd = document.createElement('td');
+    copyTd.className = 'saisie-copy-cell';
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'saisie-copy-above';
+    copyBtn.title = 'Recopier l\u2019horaire de la ligne du dessus';
+    copyBtn.textContent = '↓ idem';
+    copyBtn.onclick = () => {
+      const prev = findPrevRowTimes(tr);
+      if (!prev) { toast('Aucune ligne au-dessus à recopier', 'inf'); return; }
+      if (prev.arr) { arrSel.value = prev.arr; arrSel.dataset.min = prev.arrMin; }
+      if (prev.dep) { depSel.value = prev.dep; depSel.dataset.min = prev.depMin; }
+      recalc();
+    };
+    copyTd.appendChild(copyBtn);
+
     tr.appendChild(arrTd);
     tr.appendChild(depTd);
     tr.appendChild(totTd);
+    tr.appendChild(copyTd);
   }
 
   // Cellule nom (avec pastille + bascule section si polyvalent)
@@ -12489,7 +12696,7 @@ function mSaisie(box, asView) {
   tbl2.className = 'saisie-table';
   tbl2.innerHTML =
     '<thead><tr><th>Salarié</th><th>Arrivée</th><th>Départ</th>' +
-    '<th>Total</th><th></th></tr></thead>';
+    '<th>Total</th><th></th><th></th></tr></thead>';
   const tb2 = document.createElement('tbody');
   if (!cuisineIds.length) {
     const tr = document.createElement('tr');
@@ -12518,7 +12725,7 @@ function mSaisie(box, asView) {
   tbl3.className = 'saisie-table';
   tbl3.innerHTML =
     '<thead><tr><th>Serveur</th><th>CA (€)</th><th>Couv.</th>' +
-    '<th>Arrivée</th><th>Départ</th><th>Total</th><th></th></tr></thead>';
+    '<th>Arrivée</th><th>Départ</th><th>Total</th><th></th><th></th></tr></thead>';
   const tb3 = document.createElement('tbody');
   if (!salleIds.length) {
     const tr = document.createElement('tr');
@@ -12535,13 +12742,13 @@ function mSaisie(box, asView) {
     const caTd = document.createElement('td');
     const caInp = numInput('sv_ca_' + eid, sv.ca);
     caInp.classList.add('saisie-enter');
-    caInp.oninput = recalcTotaux;
+    caInp.oninput = () => { recalcTotaux(); scheduleAutosave(); };
     caTd.appendChild(caInp);
     tr.appendChild(caTd);
     const cvTd = document.createElement('td');
     const cvInp = numInput('sv_cv_' + eid, sv.couv);
     cvInp.classList.add('saisie-enter');
-    cvInp.oninput = recalcTotaux;
+    cvInp.oninput = () => { recalcTotaux(); scheduleAutosave(); };
     cvTd.appendChild(cvInp);
     tr.appendChild(cvTd);
     buildHeureCells(tr, eid);
@@ -12865,7 +13072,12 @@ function makeAddPresentRow(d, section) {
   function candidates() {
     return S.emps
       .filter(e => saisieCtx()._presentIds.indexOf(e.id) < 0)
-      .filter(e => section === 'tous' ? true : e.s === section);
+      .filter(e => {
+        if (section === 'tous') return true;
+        if (e.s === section) return true;
+        // Les polyvalents (ec) peuvent travailler dans l'autre section
+        return !!e.ec;
+      });
   }
 
   function addEmp(eid) {
@@ -12886,6 +13098,16 @@ function makeAddPresentRow(d, section) {
       setReal(S.y, S.m, d, eid, Object.assign({}, prev, { sect: section }));
     }
     render();
+    // Fluidité : place le curseur directement sur le champ « arrivée »
+    // du salarié qu'on vient d'ajouter, prêt à taper l'heure.
+    setTimeout(() => {
+      const arrField = document.getElementById('hr_arr_' + eid);
+      if (arrField) {
+        arrField.focus();
+        try { arrField.select(); } catch (err) { /* select */ }
+        arrField.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    }, 80);
   }
 
   function refresh() {
@@ -13074,20 +13296,16 @@ function saveSaisieForm(box, d) {
 
   setDaily(S.y, S.m, d, dd);
 
-  // Heures réelles : lues depuis les listes déroulantes (valeur en minutes,
-  // potentiellement > 1440 pour gérer après minuit → on ramène modulo 24h)
+  // Heures réelles : lues depuis les champs texte libres (parsées en minutes).
+  // Pas de service de nuit : un départ ≤ arrivée = pas de total (saisie à revoir).
   S.emps.forEach(e => {
     const arrEl = document.getElementById('hr_arr_' + e.id);
     const depEl = document.getElementById('hr_dep_' + e.id);
     if (!arrEl && !depEl) return;
-    const arrRaw = (arrEl && arrEl.value !== '') ? parseInt(arrEl.value, 10) : null;
-    const depRaw = (depEl && depEl.value !== '') ? parseInt(depEl.value, 10) : null;
-    if (arrRaw != null || depRaw != null) {
-      // Total = différence sur les valeurs linéaires (gère après minuit)
-      const total = (arrRaw != null && depRaw != null && depRaw > arrRaw)
-        ? depRaw - arrRaw : null;
-      const arr = arrRaw != null ? arrRaw % (24 * 60) : null;
-      const dep = depRaw != null ? depRaw % (24 * 60) : null;
+    const arr = readTimeField(arrEl);
+    const dep = readTimeField(depEl);
+    if (arr != null || dep != null) {
+      const total = (arr != null && dep != null && dep > arr) ? dep - arr : null;
       const prev = getReal(S.y, S.m, d, e.id) || {};
       setReal(S.y, S.m, d, e.id, {
         arr: arr, dep: dep, total: total, note: prev.note || '',
