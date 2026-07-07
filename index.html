@@ -13840,7 +13840,12 @@ function mSaisieSynth(box) {
 /* Formate un montant en euros sans décimales inutiles. */
 function fmtEur(v) {
   if (!v) return '0 €';
-  return Math.round(v).toLocaleString('fr-FR') + ' €';
+  // Affiche les centimes seulement s'ils sont non nuls (sinon euro entier)
+  const hasCents = Math.abs(v * 100 % 100) >= 0.5;
+  return v.toLocaleString('fr-FR', {
+    minimumFractionDigits: hasCents ? 2 : 0,
+    maximumFractionDigits: 2
+  }) + ' €';
 }
 
 /* Construit un résumé texte du mois (pour copier-coller vers la RH). */
