@@ -13079,6 +13079,7 @@ function mSaisie(box, asView) {
   function recalcEnc() {
     let tc = 0, tr = 0;
     encRows.forEach(row => {
+      if (row.key === 'encaisser') return; // exclu de l'écart Clyo/Réel
       const vc = parseFloat((document.getElementById('clyo_' + row.key) || {}).value);
       if (!isNaN(vc)) tc += vc;
       const vr = parseFloat((document.getElementById('reel_' + row.key) || {}).value);
