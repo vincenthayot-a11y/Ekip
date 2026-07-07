@@ -1453,6 +1453,37 @@ table.grid {
 }
 .suivi-search input { flex: 1; }
 
+/* Fiche par salarié */
+.fiche-table { width: 100%; border-collapse: collapse; }
+.fiche-table th {
+  text-align: left; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--text-3); font-weight: 700;
+  padding: 8px 10px; border-bottom: 2px solid var(--border);
+}
+.fiche-table td { padding: 10px; font-size: 13px; border-bottom: 0.5px solid var(--border); }
+.fiche-row { cursor: pointer; transition: background .1s; }
+.fiche-row:hover { background: var(--surface-2); }
+.fiche-td-name { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.fiche-over { color: var(--danger); font-weight: 600; }
+.fiche-under { color: #8a6d1f; }
+.fiche-empty { text-align: center; color: var(--text-3); padding: 20px; }
+.fiche-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.fiche-dot { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; }
+.fiche-name { font-size: 20px; font-weight: 700; font-family: var(--font-display); color: var(--text); }
+.fiche-sub { font-size: 13px; color: var(--text-2); margin-top: 2px; }
+.fiche-stats {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+.fiche-stat {
+  background: var(--surface-2); border-radius: 12px; padding: 14px;
+  text-align: center;
+}
+.fiche-stat-val { font-size: 20px; font-weight: 700; color: var(--text); }
+.fiche-stat-lbl { font-size: 11px; color: var(--text-3); margin-top: 4px; text-transform: uppercase; letter-spacing: .03em; }
+.fiche-stat--over .fiche-stat-val { color: var(--danger); }
+.fiche-stat--under .fiche-stat-val { color: #8a6d1f; }
+
 /* Bandeau de complétude du coût main-d'œuvre */
 .cost-banner {
   display: flex;
@@ -4946,6 +4977,29 @@ function emptyDaily() {
 }
 
 /* Total des encaissements Clyo (théorique). */
+/* Écart de caisse d'un jour : (CA réel − CA déclaré serveurs)
+   + (fond jour − fond veille). « À encaisser » exclu du CA réel.
+   Retourne null si aucune donnée exploitable. */
+function ecartCaisseJour(year, month, day) {
+  const dd = getDaily(year, month, day);
+  if (!dd) return null;
+  const reel = dd.reel || {};
+  let caReel = 0, hasReel = false;
+  Object.keys(reel).forEach(k => {
+    if (k === 'encaisser') return;
+    if (reel[k]) { caReel += reel[k]; hasReel = true; }
+  });
+  let caDecl = 0, hasDecl = false;
+  const sv = dd.serveurs || {};
+  Object.keys(sv).forEach(eid => {
+    if (sv[eid] && sv[eid].ca) { caDecl += sv[eid].ca; hasDecl = true; }
+  });
+  const fv = dd.fdcVeille || 0;
+  const fj = dd.fdcJour || 0;
+  if (!hasReel && !hasDecl) return null;
+  return (caReel - caDecl) + (fj - fv);
+}
+
 function totalClyo(dd) {
   if (!dd || !dd.clyo) return 0;
   return Object.keys(dd.clyo).reduce((s, k) => s + (dd.clyo[k] || 0), 0);
@@ -7685,7 +7739,9 @@ function rRapports() {
     { icon: '📊', title: 'Statistiques postes', rap: 'stats',
       desc: 'Répartition des affectations par employé et par poste.' },
     { icon: '🧾', title: 'Suivi crédits & notes', rap: 'suiviCredits',
-      desc: 'Crédits, bons cadeaux et observations — recherche par mot-clé.' }
+      desc: 'Crédits, bons cadeaux et observations — recherche par mot-clé.' },
+    { icon: '👤', title: 'Fiche par salarié', rap: 'ficheSalarie',
+      desc: 'Heures, écart contrat, CA et couverts — tableau global et détail.' }
   ];
 
   const grid = document.createElement('div');
@@ -7731,7 +7787,8 @@ function rRapportDetail() {
     rapCA: '📈 Synthèse CA mensuelle',
     annuel: '📅 Vue annuelle',
     stats: '📊 Statistiques postes',
-    suiviCredits: '🧾 Suivi crédits & notes'
+    suiviCredits: '🧾 Suivi crédits & notes',
+    ficheSalarie: '👤 Fiche par salarié'
   };
   const rap = S.rapType || 'dashboard';
 
@@ -7741,7 +7798,7 @@ function rRapportDetail() {
   const back = document.createElement('button');
   back.className = 'btn bg caisse-back-btn';
   back.innerHTML = '← Rapports';
-  back.onclick = () => { S.view = 'rapports'; S.rapType = null; render(); };
+  back.onclick = () => { S.view = 'rapports'; S.rapType = null; S.ficheEmp = null; render(); };
   bar.appendChild(back);
   const t = document.createElement('div');
   t.className = 'caisse-bar-title';
@@ -7767,6 +7824,7 @@ function rRapportDetail() {
     else if (rap === 'annuel')       mAnnuel(content);
     else if (rap === 'stats')        mStats(content);
     else if (rap === 'suiviCredits') mSuiviCredits(content);
+    else if (rap === 'ficheSalarie') mFicheSalarie(content);
   } finally {
     S._rapView = false;
   }
@@ -8022,6 +8080,7 @@ function rCaisse() {
 
   let body = '';
   let totCout = 0, totCoutComplet = true;
+  let totEcart = 0, hasEcart = false;
   rows.forEach(r => {
     const w = dow(S.y, S.m, r.d);
     const isWE = (w === 0 || w === 6);
@@ -8061,6 +8120,19 @@ function rCaisse() {
           '">' + ratio.toFixed(0) + '%</span>'
       : '<span class="caisse-na">—</span>';
 
+    // Écart de caisse du jour
+    const ec = ecartCaisseJour(S.y, S.m, r.d);
+    let ecHtml;
+    if (ec === null) {
+      ecHtml = '<span class="caisse-na">—</span>';
+    } else {
+      const a = Math.abs(ec);
+      const cls = a < 0.01 ? 'saisie-ec-ok' : a < 5 ? 'saisie-ec-warn' : 'saisie-ec-bad';
+      ecHtml = '<span class="' + cls + '">' + (ec > 0 ? '+' : '') +
+        ec.toFixed(2) + ' €</span>';
+      totEcart += ec; hasEcart = true;
+    }
+
     body +=
       '<tr class="' + rowClass + '" data-day="' + r.d + '">' +
         '<td class="caisse-day">' +
@@ -8076,6 +8148,7 @@ function rCaisse() {
         '<td>' + (tmJour ? tmJour.toFixed(1) + ' €' : '<span class="caisse-na">—</span>') + '</td>' +
         '<td class="caisse-cout-cell">' + coutHtml + '</td>' +
         '<td>' + ratioHtml + '</td>' +
+        '<td>' + ecHtml + '</td>' +
       '</tr>';
   });
 
@@ -8097,6 +8170,10 @@ function rCaisse() {
       '<td>' + (ratioTot !== null ? '<span class="' +
         (ratioTot < 35 ? 'saisie-ec-ok' : ratioTot < 45 ? 'saisie-ec-warn' : 'saisie-ec-bad') +
         '">' + ratioTot.toFixed(0) + '%</span>' : '—') + '</td>' +
+      '<td>' + (hasEcart ? '<span class="' +
+        (Math.abs(totEcart) < 0.01 ? 'saisie-ec-ok' :
+         Math.abs(totEcart) < 5 ? 'saisie-ec-warn' : 'saisie-ec-bad') +
+        '">' + (totEcart > 0 ? '+' : '') + totEcart.toFixed(2) + ' €</span>' : '—') + '</td>' +
     '</tr>';
 
   scroll.innerHTML =
@@ -8104,7 +8181,7 @@ function rCaisse() {
       '<thead><tr>' +
         '<th>Jour</th><th>CA</th><th>CA N-1</th><th>Évol.</th>' +
         '<th>Couv.</th><th>Ticket</th>' +
-        '<th>Coût perso</th><th>Masse %</th>' +
+        '<th>Coût perso</th><th>Masse %</th><th>Écart caisse</th>' +
       '</tr></thead>' +
       '<tbody>' + body + '</tbody>' +
     '</table>';
@@ -11427,6 +11504,147 @@ function mSuiviCredits(box) {
     });
   }
   box.appendChild(obsSec);
+
+  const foot = document.createElement('div');
+  foot.className = 'modal-foot--end-only';
+  foot.appendChild(mBtn('Fermer', false, closeModal));
+  box.appendChild(foot);
+}
+
+/* Fiche par salarié : tableau global (heures/contrat/écart + CA/couverts)
+   avec clic pour le détail d'un salarié. */
+function mFicheSalarie(box) {
+  box.classList.add('mo--stats');
+  const eur2 = (n) => n.toLocaleString('fr-FR',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  const h1 = (n) => (Math.round(n * 10) / 10) + 'h';
+
+  // CA + couverts d'un serveur sur le mois
+  const svTotals = (empId) => {
+    const k = S.y + '-' + String(S.m + 1).padStart(2, '0');
+    const md = S.daily[k] || {};
+    let ca = 0, couv = 0, jours = 0;
+    Object.keys(md).forEach(day => {
+      const sv = (md[day].serveurs || {})[empId];
+      if (sv) {
+        if (sv.ca) ca += sv.ca;
+        if (sv.couv) couv += sv.couv;
+        if (sv.ca || sv.couv) jours++;
+      }
+    });
+    return { ca, couv, jours };
+  };
+  // Nombre de jours réellement travaillés
+  const joursTravailles = (empId) => {
+    const k = S.y + '-' + String(S.m + 1).padStart(2, '0');
+    const mr = S.real[k] || {};
+    let n = 0;
+    Object.keys(mr).forEach(day => {
+      const r = (mr[day] || {})[String(empId)];
+      if (r && r.total != null && r.total > 0) n++;
+    });
+    return n;
+  };
+
+  // ── Détail d'un salarié sélectionné ──────────────────────────────────────
+  if (S.ficheEmp != null) {
+    const e = findEmp(S.ficheEmp);
+    if (e) {
+      const back = document.createElement('button');
+      back.className = 'btn bg btn-sm';
+      back.style.marginBottom = '14px';
+      back.textContent = '← Tous les salariés';
+      back.onclick = () => { S.ficheEmp = null; render(); };
+      box.appendChild(back);
+
+      const head = document.createElement('div');
+      head.className = 'fiche-head';
+      const col = eColor(e.id);
+      head.innerHTML =
+        "<span class='fiche-dot' style='background:" + col.bg +
+        ';border:3px solid ' + col.text + "'></span>" +
+        "<div><div class='fiche-name'>" + e.n + '</div>' +
+        "<div class='fiche-sub'>" + (e.s === 'cuisine' ? 'Cuisine' : 'Salle') +
+        ' · ' + (e.t === 'extra' ? 'Extra' : 'Contrat') +
+        (e.h ? ' · ' + e.h + 'h/mois' : '') + '</div></div>';
+      box.appendChild(head);
+
+      const hReal = empRealHoursMonth(S.y, S.m, e.id);
+      const contrat = e.h || 0;
+      const ecart = contrat ? hReal - contrat : null;
+      const jours = joursTravailles(e.id);
+
+      const stats = document.createElement('div');
+      stats.className = 'fiche-stats';
+      const card = (lbl, val, cls) =>
+        "<div class='fiche-stat " + (cls || '') + "'>" +
+        "<div class='fiche-stat-val'>" + val + '</div>' +
+        "<div class='fiche-stat-lbl'>" + lbl + '</div></div>';
+      let html = card('Heures réelles', h1(hReal)) +
+        (contrat ? card('Contrat', h1(contrat)) : '') +
+        (ecart != null ? card('Écart', (ecart >= 0 ? '+' : '') + h1(ecart),
+          ecart > 0 ? 'fiche-stat--over' : ecart < 0 ? 'fiche-stat--under' : '') : '') +
+        card('Jours travaillés', jours);
+      if (e.s === 'salle') {
+        const sv = svTotals(e.id);
+        const tm = sv.couv ? sv.ca / sv.couv : 0;
+        html += card('CA déclaré', eur2(sv.ca)) +
+          card('Couverts', sv.couv) +
+          card('Ticket moyen', sv.couv ? eur2(tm) : '—');
+      }
+      stats.innerHTML = html;
+      box.appendChild(stats);
+    }
+    const foot = document.createElement('div');
+    foot.className = 'modal-foot--end-only';
+    foot.appendChild(mBtn('Fermer', false, closeModal));
+    box.appendChild(foot);
+    return;
+  }
+
+  // ── Tableau global de tous les salariés ──────────────────────────────────
+  const tbl = document.createElement('table');
+  tbl.className = 'fiche-table';
+  tbl.innerHTML =
+    '<thead><tr><th>Salarié</th><th>Réelles</th><th>Contrat</th>' +
+    '<th>Écart</th><th>Jours</th><th>CA</th><th>Couv.</th></tr></thead>';
+  const tb = document.createElement('tbody');
+
+  // Ne montrer que les salariés ayant travaillé ce mois (ou tous ? → tous
+  // ceux avec des heures réelles, triés par heures décroissantes)
+  const rows = S.emps.map(e => ({
+    e, h: empRealHoursMonth(S.y, S.m, e.id), j: joursTravailles(e.id),
+    sv: e.s === 'salle' ? svTotals(e.id) : null
+  })).filter(r => r.h > 0 || r.j > 0)
+    .sort((a, b) => b.h - a.h);
+
+  if (!rows.length) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="7" class="fiche-empty">' +
+      'Aucune heure saisie ce mois.</td>';
+    tb.appendChild(tr);
+  }
+  rows.forEach(({ e, h, j, sv }) => {
+    const contrat = e.h || 0;
+    const ecart = contrat ? h - contrat : null;
+    const col = eColor(e.id);
+    const tr = document.createElement('tr');
+    tr.className = 'fiche-row';
+    tr.innerHTML =
+      "<td class='fiche-td-name'><span class='emp-dot' style='background:" +
+      col.bg + ';border:2px solid ' + col.text + "'></span>" + e.n + '</td>' +
+      '<td>' + h1(h) + '</td>' +
+      '<td>' + (contrat ? h1(contrat) : '—') + '</td>' +
+      "<td class='" + (ecart > 0 ? 'fiche-over' : ecart < 0 ? 'fiche-under' : '') +
+      "'>" + (ecart != null ? (ecart >= 0 ? '+' : '') + h1(ecart) : '—') + '</td>' +
+      '<td>' + j + '</td>' +
+      '<td>' + (sv && sv.ca ? eur2(sv.ca) : '—') + '</td>' +
+      '<td>' + (sv && sv.couv ? sv.couv : '—') + '</td>';
+    tr.onclick = () => { S.ficheEmp = e.id; render(); };
+    tb.appendChild(tr);
+  });
+  tbl.appendChild(tb);
+  box.appendChild(tbl);
 
   const foot = document.createElement('div');
   foot.className = 'modal-foot--end-only';
