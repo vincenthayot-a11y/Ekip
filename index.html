@@ -12869,7 +12869,8 @@ function makeAddPresentRow(d, section) {
   }
 
   function addEmp(eid) {
-    const box = document.querySelector('.mo');
+    const box = document.querySelector('.saisie-form') ||
+      document.querySelector('.mo') || document.querySelector('.caisse-wrap');
     if (box) saveSaisieForm(box, d);
     if (saisieCtx()._presentIds.indexOf(eid) < 0) saisieCtx()._presentIds.push(eid);
     const dd = getDaily(S.y, S.m, d) || emptyDaily();
