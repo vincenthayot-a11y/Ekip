@@ -5009,7 +5009,7 @@ function ecartCaisseJour(year, month, day) {
   const reel = dd.reel || {};
   let caReel = 0, hasReel = false;
   Object.keys(reel).forEach(k => {
-    if (k === 'encaisser') return;
+    if (k === 'encaisser' || k === 'amex') return;
     if (reel[k]) { caReel += reel[k]; hasReel = true; }
   });
   let caDecl = 0, hasDecl = false;
@@ -13128,7 +13128,7 @@ function mSaisie(box, asView) {
   function recalcEnc() {
     let tc = 0, tr = 0;
     encRows.forEach(row => {
-      if (row.key === 'encaisser') return; // exclu de l'écart Clyo/Réel
+      if (row.key === 'encaisser' || row.key === 'amex') return; // exclus de l'écart Clyo/Réel
       const vc = parseFloat((document.getElementById('clyo_' + row.key) || {}).value);
       if (!isNaN(vc)) tc += vc;
       const vr = parseFloat((document.getElementById('reel_' + row.key) || {}).value);
@@ -13180,7 +13180,7 @@ function mSaisie(box, asView) {
     // CA réel = total colonne Réel
     let caReel = 0, hasReel = false;
     encRows.forEach(row => {
-      if (row.key === 'encaisser') return; // exclu du contrôle de caisse
+      if (row.key === 'encaisser' || row.key === 'amex') return; // exclus du contrôle de caisse
       const v = parseFloat((document.getElementById('reel_' + row.key) || {}).value);
       if (!isNaN(v)) { caReel += v; hasReel = true; }
     });
