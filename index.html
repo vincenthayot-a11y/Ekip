@@ -1484,6 +1484,16 @@ table.grid {
 .fiche-stat--over .fiche-stat-val { color: var(--danger); }
 .fiche-stat--under .fiche-stat-val { color: #8a6d1f; }
 
+/* Bouton supprimer une saisie dans le tableau caisse */
+.caisse-act { text-align: center; width: 44px; }
+.caisse-del {
+  border: none; background: transparent; cursor: pointer;
+  font-size: 14px; opacity: .35; padding: 4px 6px; border-radius: 6px;
+  transition: opacity .1s, background .1s;
+}
+.caisse-row:hover .caisse-del { opacity: .7; }
+.caisse-del:hover { opacity: 1; background: var(--danger-soft, #fee2e2); }
+
 /* Bandeau de complétude du coût main-d'œuvre */
 .cost-banner {
   display: flex;
@@ -4977,6 +4987,20 @@ function emptyDaily() {
 }
 
 /* Total des encaissements Clyo (théorique). */
+/* Efface la saisie de caisse ET les heures réelles d'un jour donné. */
+function clearDaySaisie(year, month, day) {
+  const mk2 = year + '-' + String(month + 1).padStart(2, '0');
+  // Caisse (daily)
+  if (S.daily[mk2] && S.daily[mk2][String(day)]) {
+    delete S.daily[mk2][String(day)];
+  }
+  // Heures réelles
+  if (S.real[mk2] && S.real[mk2][String(day)]) {
+    delete S.real[mk2][String(day)];
+  }
+  save();
+}
+
 /* Écart de caisse d'un jour : (CA réel − CA déclaré serveurs)
    + (fond jour − fond veille). « À encaisser » exclu du CA réel.
    Retourne null si aucune donnée exploitable. */
@@ -8149,6 +8173,12 @@ function rCaisse() {
         '<td class="caisse-cout-cell">' + coutHtml + '</td>' +
         '<td>' + ratioHtml + '</td>' +
         '<td>' + ecHtml + '</td>' +
+        '<td class="caisse-act">' +
+          ((dayHasDaily(S.y, S.m, r.d) || dayHasReal(S.y, S.m, r.d))
+            ? '<button class="caisse-del" data-del="' + r.d +
+              '" title="Supprimer la saisie de ce jour">🗑</button>'
+            : '') +
+        '</td>' +
       '</tr>';
   });
 
@@ -8174,6 +8204,7 @@ function rCaisse() {
         (Math.abs(totEcart) < 0.01 ? 'saisie-ec-ok' :
          Math.abs(totEcart) < 5 ? 'saisie-ec-warn' : 'saisie-ec-bad') +
         '">' + (totEcart > 0 ? '+' : '') + totEcart.toFixed(2) + ' €</span>' : '—') + '</td>' +
+      '<td class="caisse-act"></td>' +
     '</tr>';
 
   scroll.innerHTML =
@@ -8181,7 +8212,7 @@ function rCaisse() {
       '<thead><tr>' +
         '<th>Jour</th><th>CA</th><th>CA N-1</th><th>Évol.</th>' +
         '<th>Couv.</th><th>Ticket</th>' +
-        '<th>Coût perso</th><th>Masse %</th><th>Écart caisse</th>' +
+        '<th>Coût perso</th><th>Masse %</th><th>Écart caisse</th><th></th>' +
       '</tr></thead>' +
       '<tbody>' + body + '</tbody>' +
     '</table>';
@@ -8194,6 +8225,25 @@ function rCaisse() {
       tr.onclick = () => {
         const d = parseInt(tr.getAttribute('data-day'), 10);
         openSaisie(d);
+      };
+    });
+    // Bouton supprimer la saisie d'un jour (avec confirmation)
+    scroll.querySelectorAll('.caisse-del').forEach(btn => {
+      btn.onclick = (ev) => {
+        ev.stopPropagation();
+        const d = parseInt(btn.getAttribute('data-del'), 10);
+        S.modal = {
+          type: 'confirm', danger: true, confirmLabel: 'Supprimer',
+          title: 'Supprimer la saisie du ' + d + ' ' + MN[S.m],
+          msg: 'Effacer le CA, les couverts, les encaissements et les heures ' +
+            'réelles saisis pour ce jour ? Cette action est irréversible.',
+          onOk: () => {
+            clearDaySaisie(S.y, S.m, d);
+            S.modal = null;
+            render();
+          }
+        };
+        render();
       };
     });
   }, 20);
