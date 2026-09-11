@@ -1494,6 +1494,35 @@ table.grid {
 .caisse-row:hover .caisse-del { opacity: .7; }
 .caisse-del:hover { opacity: 1; background: var(--danger-soft, #fee2e2); }
 
+/* Sauvegardes / points de restauration */
+.snap-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.snap-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 12px; background: var(--surface-2); border-radius: 9px;
+  font-size: 13px;
+}
+.snap-date { font-weight: 600; color: var(--text); }
+.snap-size { color: var(--text-3); font-size: 12px; margin-left: auto; margin-right: 8px; }
+
+/* Note de rôle en tête de la vue Heures */
+.heures-role-note {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin: 0 18px 14px; padding: 10px 14px;
+  background: var(--surface-2); border-radius: var(--radius);
+  font-size: 12.5px; color: var(--text-2); line-height: 1.5;
+}
+.heures-role-note span { flex: 1; min-width: 220px; }
+
+/* Diagnostic de synchronisation Drive */
+.sync-diag {
+  font-size: 12px; color: #92400e; line-height: 1.5;
+  margin-top: 6px;
+}
+.sync-diag--box {
+  background: #fef3c7; border: 1px solid #fde68a;
+  border-radius: 9px; padding: 10px 12px; margin: 0 0 10px;
+}
+
 /* Bandeau de complétude du coût main-d'œuvre */
 .cost-banner {
   display: flex;
@@ -4986,6 +5015,20 @@ function emptyDaily() {
 }
 
 /* Total des encaissements Clyo (théorique). */
+/* ───────────────────────────────────────────────────────────────────────────
+   RÈGLES DE CALCUL DES ÉCARTS — source unique de vérité
+   ───────────────────────────────────────────────────────────────────────────
+   Modes de paiement exclus des calculs d'écart (Clyo/Réel, contrôle de
+   caisse, colonne « Écart caisse »). Modifier ici suffit : les trois
+   calculs s'alignent automatiquement.
+   ─────────────────────────────────────────────────────────────────────────── */
+const MODES_EXCLUS_ECART = ['encaisser', 'amex'];
+
+/* Ce mode de paiement compte-t-il dans les calculs d'écart ? */
+function modeCompteDansEcart(key) {
+  return MODES_EXCLUS_ECART.indexOf(key) < 0;
+}
+
 /* Efface la saisie de caisse ET les heures réelles d'un jour donné. */
 function clearDaySaisie(year, month, day) {
   const mk2 = year + '-' + String(month + 1).padStart(2, '0');
@@ -5009,7 +5052,7 @@ function ecartCaisseJour(year, month, day) {
   const reel = dd.reel || {};
   let caReel = 0, hasReel = false;
   Object.keys(reel).forEach(k => {
-    if (k === 'encaisser' || k === 'amex') return;
+    if (!modeCompteDansEcart(k)) return;
     if (reel[k]) { caReel += reel[k]; hasReel = true; }
   });
   let caDecl = 0, hasDecl = false;
@@ -6611,25 +6654,46 @@ function setSaveStatus(status) {
 }
 
 /* Appel HTTP vers l'Apps Script (contourne le redirect 302 de Google). */
+/* Dernière erreur de synchro rencontrée (diagnostic dans Paramètres). */
+let _lastSyncError = '';
+
 function gasRequest(url, method, body, callback) {
   const opts = { method: method, redirect: 'follow' };
   if (body) opts.body = body;
   fetch(url, opts)
-    .then(r => r.text())
+    .then(r => {
+      if (!r.ok) _lastSyncError = 'HTTP ' + r.status + ' ' + r.statusText;
+      return r.text();
+    })
     .then(t => {
       try {
-        callback(JSON.parse(t));
+        const parsed = JSON.parse(t);
+        if (parsed && parsed.ok) _lastSyncError = '';
+        else if (parsed && parsed.error) _lastSyncError = String(parsed.error);
+        callback(parsed);
       } catch (e) {
         // Parfois Google enveloppe dans du HTML — on cherche le JSON dedans
         const m = t.match(/\{[\s\S]*\}/);
         if (m) {
-          try { callback(JSON.parse(m[0])); } catch (e2) { callback(null); }
-        } else {
-          callback(null);
+          try { callback(JSON.parse(m[0])); return; } catch (e2) { /* suite */ }
         }
+        // Diagnostic : page de connexion Google = script non public
+        if (/accounts\.google\.com|Sign in|connexion/i.test(t)) {
+          _lastSyncError = 'Le script Google demande une connexion : ' +
+            'il doit être déployé avec accès « Tout le monde ».';
+        } else if (/script\.google\.com.*error|Erreur/i.test(t)) {
+          _lastSyncError = 'Le script Google a renvoyé une erreur.';
+        } else if (!_lastSyncError) {
+          _lastSyncError = 'Réponse inattendue du script (pas du JSON).';
+        }
+        callback(null);
       }
     })
-    .catch(() => callback(null));
+    .catch((err) => {
+      _lastSyncError = 'Connexion impossible : ' +
+        (err && err.message ? err.message : 'réseau ou CORS bloqué');
+      callback(null);
+    });
 }
 
 /* Sauvegarde : local systématique + Drive si configuré. */
@@ -6643,6 +6707,9 @@ function save() {
     // 1. Local toujours sauvegardé (instantané)
     try { localStorage.setItem('plan_v9', JSON.stringify(data)); } catch (e) { /* quota? */ }
 
+    // 1bis. Snapshot de secours (rotation, au plus 1 toutes les 6h)
+    try { makeSnapshot(false); } catch (e) { /* best effort */ }
+
     // 2. Drive si configuré
     if (!GAS_URL) { setSaveStatus('local'); return; }
     _trySyncToDrive(data);
@@ -6650,6 +6717,88 @@ function save() {
 }
 
 /* Tentative de synchro vers Drive avec debounce 800ms (évite de spammer). */
+/* ───────────────────────────────────────────────────────────────────────────
+   SAUVEGARDES DE SECOURS (snapshots locaux horodatés)
+   ───────────────────────────────────────────────────────────────────────────
+   Conserve les N derniers états connus dans localStorage, en rotation.
+   Protège contre une corruption de données ou une mauvaise manipulation :
+   on peut restaurer un état antérieur sans dépendre de Drive.
+   ─────────────────────────────────────────────────────────────────────────── */
+const SNAP_KEY = 'ekip_snapshots';
+const SNAP_MAX = 6;          // nombre de snapshots conservés
+const SNAP_MIN_INTERVAL = 6 * 60 * 60 * 1000; // 6h entre deux snapshots
+
+function listSnapshots() {
+  try {
+    const raw = localStorage.getItem(SNAP_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+
+/* Crée un snapshot si le dernier date de plus de SNAP_MIN_INTERVAL
+   (ou si force = true). */
+function makeSnapshot(force) {
+  try {
+    const snaps = listSnapshots();
+    const now = Date.now();
+    if (!force && snaps.length) {
+      const last = snaps[snaps.length - 1];
+      if (now - last.t < SNAP_MIN_INTERVAL) return false;
+    }
+    const raw = localStorage.getItem('plan_v9');
+    if (!raw) return false;
+    snaps.push({ t: now, size: raw.length, data: raw });
+    while (snaps.length > SNAP_MAX) snaps.shift();
+    localStorage.setItem(SNAP_KEY, JSON.stringify(snaps));
+    return true;
+  } catch (e) {
+    // Quota dépassé : on retire les plus anciens et on réessaie une fois
+    try {
+      const snaps = listSnapshots();
+      snaps.splice(0, Math.ceil(snaps.length / 2));
+      localStorage.setItem(SNAP_KEY, JSON.stringify(snaps));
+    } catch (e2) { /* abandon silencieux */ }
+    return false;
+  }
+}
+
+/* Restaure un snapshot (index dans la liste) après confirmation. */
+function restoreSnapshot(idx) {
+  const snaps = listSnapshots();
+  const s = snaps[idx];
+  if (!s) return;
+  makeSnapshot(true); // sécurise l'état courant avant d'écraser
+  localStorage.setItem('plan_v9', s.data);
+  location.reload();
+}
+
+/* Télécharge une sauvegarde complète horodatée (fichier JSON). */
+function downloadBackup() {
+  const raw = localStorage.getItem('plan_v9');
+  if (!raw) { toast('Aucune donnée à sauvegarder', 'err'); return; }
+  const d = new Date();
+  const stamp = d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+  const blob = new Blob([raw], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'ekip_sauvegarde_' + stamp + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  localStorage.setItem('ekip_last_backup', String(Date.now()));
+  toast('Sauvegarde téléchargée ✓', 'ok');
+}
+
+/* Nombre de jours depuis la dernière sauvegarde téléchargée. */
+function daysSinceBackup() {
+  const t = parseInt(localStorage.getItem('ekip_last_backup'), 10);
+  if (!t) return null;
+  return Math.floor((Date.now() - t) / (24 * 60 * 60 * 1000));
+}
+
 function _trySyncToDrive(data) {
   if (_saveTimer) clearTimeout(_saveTimer);
   setSaveStatus('saving');
@@ -7449,6 +7598,22 @@ function rHeures() {
   barActions.className = 'caisse-bar-actions';
   bar.appendChild(barActions);
   outer.appendChild(bar);
+
+  // Rôle de cette vue : correction rapide des totaux sur tout le mois.
+  // Le détail (arrivée/départ, CA, encaissements) se saisit dans la Saisie
+  // du jour, accessible d'un clic.
+  const roleNote = document.createElement('div');
+  roleNote.className = 'heures-role-note';
+  roleNote.innerHTML =
+    "<span>Vue mensuelle : ajuste un total d\u2019heures directement dans une " +
+    'case. Pour saisir les horaires détaillés, le CA et la caisse d\u2019un ' +
+    'jour, ouvre la saisie du jour.</span>';
+  const goSaisie = document.createElement('button');
+  goSaisie.className = 'btn bg btn-sm';
+  goSaisie.textContent = '📋 Saisie du jour →';
+  goSaisie.onclick = () => { openSaisie(); };
+  roleNote.appendChild(goSaisie);
+  outer.appendChild(roleNote);
 
   // ── Sous-onglets Tout / Cuisine / Salle ───────────────────────────────
   const subTabs = document.createElement('div');
@@ -8747,8 +8912,6 @@ function rModal() {
   else if (type === 'rapCA')            mRapCA(box);
   else if (type === 'dashboard')        mDashboard(box);
   else if (type === 'note')             mNote(box);
-  else if (type === 'copier')           mCopier(box);
-  else if (type === 'drive')            mDrive(box);
   else if (type === 'pointage_pick')    mPointagePick(box);
   else if (type === 'pointage_review')  mPointageReview(box);
   else if (type === 'paie')             mPaie(box);
@@ -8821,98 +8984,6 @@ function mHdr(box, title) {
    localStorage sous la clé "gas_url".
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function mDrive(box) {
-  mHdr(box, '☁ Connexion Google Drive');
-  const currentUrl = GAS_URL;
-
-  // Description + lien vers Apps Script
-  const desc = document.createElement('p');
-  desc.className = 'drive-desc';
-  desc.innerHTML =
-    "Pour synchroniser le planning sur Google Drive, collez l'URL de votre " +
-    "Apps Script ci-dessous.<br>" +
-    "<a href='https://script.google.com/home' target='_blank' " +
-    "class='drive-link'>→ Ouvrir Google Apps Script</a>";
-  box.appendChild(desc);
-
-  // Input de l'URL
-  const urlInput = document.createElement('input');
-  urlInput.type = 'text';
-  urlInput.value = currentUrl;
-  urlInput.placeholder = 'https://script.google.com/macros/s/.../exec';
-  urlInput.className = 'form-input--sm';
-  box.appendChild(urlInput);
-
-  // Bloc d'instructions repliable
-  const instructions = document.createElement('details');
-  instructions.className = 'drive-instr';
-  const summary = document.createElement('summary');
-  summary.className = 'drive-instr-sum';
-  summary.textContent = "📋 Comment configurer l'Apps Script ?";
-  instructions.appendChild(summary);
-
-  const steps = document.createElement('div');
-  steps.className = 'drive-instr-steps';
-  steps.innerHTML =
-    '1. Aller sur <b>script.google.com</b> → Nouveau projet<br>' +
-    '2. Coller le code Apps Script (fourni séparément)<br>' +
-    '3. Cliquer <b>Déployer → Nouveau déploiement</b><br>' +
-    '4. Type : <b>Application Web</b><br>' +
-    '5. Accès : <b>Moi uniquement</b> ou <b>Tous (dans votre organisation)</b><br>' +
-    "6. Copier l'URL générée et la coller ici";
-  instructions.appendChild(steps);
-  box.appendChild(instructions);
-
-  // Bouton "Tester la connexion"
-  const testMsg = document.createElement('div');
-  testMsg.className = 'drive-test-msg';
-
-  const testBtn = mBtn('🔗 Tester la connexion', false, () => {
-    const url = urlInput.value.trim();
-    if (!url) { toast("Collez d'abord une URL", 'inf'); return; }
-    testMsg.innerHTML =
-      "<span style='color:#f59e0b'>⏳ Test en cours...</span>";
-    gasRequest(url + '?action=load', 'GET', null, (result) => {
-      if (result !== null) {
-        testMsg.innerHTML =
-          "<span style='color:#16a34a'>✅ Connexion réussie !</span>";
-      } else {
-        testMsg.innerHTML =
-          "<span style='color:#dc2626'>" +
-          "❌ Échec — vérifiez l'URL et les droits d'accès</span>";
-      }
-    });
-  });
-  box.appendChild(testBtn);
-  box.appendChild(testMsg);
-
-  // Footer : Déconnecter (si URL présente) / Annuler / Enregistrer
-  const foot = document.createElement('div');
-  foot.className = 'modal-foot';
-
-  if (currentUrl) {
-    const clearBtn = mBtn('Déconnecter', false, () => {
-      GAS_URL = '';
-      localStorage.removeItem('gas_url');
-      setSaveStatus('local');
-      toast('Drive déconnecté', 'warn2');
-      closeModal();
-    });
-    clearBtn.classList.add('btn-danger-outline');
-    foot.appendChild(clearBtn);
-  }
-  foot.appendChild(mBtn('Annuler', false, closeModal));
-  foot.appendChild(mBtn('Enregistrer', true, () => {
-    const url = urlInput.value.trim();
-    GAS_URL = url;
-    if (url) localStorage.setItem('gas_url', url);
-    else     localStorage.removeItem('gas_url');
-    toast(url ? 'Drive configuré ✓' : 'Drive déconnecté', 'ok');
-    closeModal();
-    setSaveStatus(url ? 'ok' : 'local');
-  }));
-  box.appendChild(foot);
-}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MODAL — ⚡ Auto-génération
@@ -10385,6 +10456,15 @@ function rParametres() {
     : "Colle l'URL de ton Apps Script pour synchroniser sur Google Drive.";
   secDrive.appendChild(driveDesc);
 
+  // Dernière erreur de synchro rencontrée (aide au diagnostic)
+  if (GAS_URL && _lastSyncError) {
+    const errBox = document.createElement('div');
+    errBox.className = 'sync-diag sync-diag--box';
+    errBox.innerHTML = '<b>Dernier problème de synchro :</b><br>' +
+      escapeHtml(_lastSyncError);
+    secDrive.appendChild(errBox);
+  }
+
   const urlInput = document.createElement('input');
   urlInput.type = 'text';
   urlInput.value = GAS_URL;
@@ -10403,10 +10483,38 @@ function rParametres() {
     const url = urlInput.value.trim();
     if (!url) { toast("Colle d'abord une URL", 'inf'); return; }
     testMsg.innerHTML = "<span style='color:#f59e0b'>⏳ Test en cours...</span>";
+    _lastSyncError = '';
+    // 1) Test de lecture
     gasRequest(url + '?action=load', 'GET', null, (result) => {
-      testMsg.innerHTML = (result !== null)
-        ? "<span style='color:#16a34a'>✅ Connexion réussie</span>"
-        : "<span style='color:#dc2626'>❌ Échec — vérifie l'URL et les droits</span>";
+      if (result === null) {
+        testMsg.innerHTML =
+          "<span style='color:#dc2626'>❌ Lecture impossible</span>" +
+          "<div class='sync-diag'>" + escapeHtml(_lastSyncError ||
+            "Vérifie l'URL et les droits du script.") + '</div>';
+        return;
+      }
+      // 2) Test d'écriture (c'est souvent là que ça coince)
+      testMsg.innerHTML =
+        "<span style='color:#16a34a'>✅ Lecture OK</span> " +
+        "<span style='color:#f59e0b'>⏳ test d'écriture...</span>";
+      _lastSyncError = '';
+      const probe = JSON.stringify({ _probe: true, _ts: Date.now() });
+      gasRequest(url + '?action=save', 'POST', probe, (r2) => {
+        if (r2 && r2.ok) {
+          testMsg.innerHTML =
+            "<span style='color:#16a34a'>✅ Lecture et écriture OK — " +
+            'la synchro fonctionne</span>';
+          toast('Drive opérationnel ✓', 'ok');
+        } else {
+          testMsg.innerHTML =
+            "<span style='color:#16a34a'>✅ Lecture OK</span> · " +
+            "<span style='color:#dc2626'>❌ Écriture refusée</span>" +
+            "<div class='sync-diag'>" + escapeHtml(_lastSyncError ||
+              'Le script ne répond pas « ok » à une écriture. ' +
+              'Vérifie que doPost gère action=save et que le déploiement ' +
+              'est à jour.') + '</div>';
+        }
+      });
     });
   });
   const saveDriveBtn = mBtn('💾 Enregistrer', true, () => {
@@ -10539,6 +10647,76 @@ function rParametres() {
   secGrid.appendChild(logoutBtn);
   secSec.appendChild(secGrid);
   outer.appendChild(secSec);
+
+  // ── Sauvegardes de secours ──────────────────────────────────────────────
+  const secBk = sectionWrap('🛟 Sauvegardes de secours');
+  const bkDesc = document.createElement('p');
+  bkDesc.className = 'params-desc';
+  const dsb = daysSinceBackup();
+  bkDesc.innerHTML = 'Télécharge régulièrement une copie de tes données. ' +
+    'Drive ne conserve qu\u2019une seule version : en cas de problème, ' +
+    'une sauvegarde locale est ton seul recours.' +
+    (dsb === null
+      ? " <b style='color:#b45309'>Aucune sauvegarde téléchargée à ce jour.</b>"
+      : dsb > 30
+        ? " <b style='color:#b91c1c'>Dernière sauvegarde il y a " + dsb + ' jours.</b>'
+        : " Dernière sauvegarde il y a " + dsb + ' jour' + (dsb > 1 ? 's' : '') + '.');
+  secBk.appendChild(bkDesc);
+
+  const bkGrid = document.createElement('div');
+  bkGrid.className = 'params-data-grid';
+  const dlBtn = document.createElement('button');
+  dlBtn.className = 'btn bgen params-data-btn';
+  dlBtn.innerHTML = "<span class='params-data-ico'>💾</span> Télécharger une sauvegarde";
+  dlBtn.onclick = () => { downloadBackup(); render(); };
+  bkGrid.appendChild(dlBtn);
+  secBk.appendChild(bkGrid);
+
+  // Liste des snapshots automatiques restaurables
+  const snaps = listSnapshots();
+  const snapTitle = document.createElement('p');
+  snapTitle.className = 'params-desc';
+  snapTitle.style.marginTop = '14px';
+  snapTitle.innerHTML = '<b>Points de restauration automatiques</b> — ' +
+    'enregistrés pendant que tu utilises l\u2019app, sur cet appareil.';
+  secBk.appendChild(snapTitle);
+
+  if (!snaps.length) {
+    const e = document.createElement('p');
+    e.className = 'params-desc';
+    e.textContent = 'Aucun point de restauration pour le moment.';
+    secBk.appendChild(e);
+  } else {
+    const list = document.createElement('div');
+    list.className = 'snap-list';
+    snaps.slice().reverse().forEach((s, i) => {
+      const realIdx = snaps.length - 1 - i;
+      const dt = new Date(s.t);
+      const lbl = dt.toLocaleDateString('fr-FR') + ' à ' +
+        dt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const row = document.createElement('div');
+      row.className = 'snap-row';
+      row.innerHTML = "<span class='snap-date'>" + lbl + '</span>' +
+        "<span class='snap-size'>" + Math.round(s.size / 1024) + ' Ko</span>';
+      const rb = document.createElement('button');
+      rb.className = 'btn bg btn-sm';
+      rb.textContent = 'Restaurer';
+      rb.onclick = () => {
+        S.modal = {
+          type: 'confirm', danger: true, confirmLabel: 'Restaurer',
+          title: 'Restaurer la sauvegarde du ' + lbl,
+          msg: 'Remplacer les données actuelles par cet état ? ' +
+            'L\u2019état courant sera conservé comme point de restauration.',
+          onOk: () => { restoreSnapshot(realIdx); }
+        };
+        render();
+      };
+      row.appendChild(rb);
+      list.appendChild(row);
+    });
+    secBk.appendChild(list);
+  }
+  outer.appendChild(secBk);
 
   // ── Zone de réinitialisation ────────────────────────────────────────────
   const secReset = sectionWrap('🗑 Réinitialisation');
@@ -11982,72 +12160,6 @@ function mAnnuel(box) {
    Copie brute de S.pl[source] → S.pl[mois courant]. Avertit avant écrasement.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function mCopier(box) {
-  mHdr(box, '📋 Copier un planning');
-
-  const descP = document.createElement('p');
-  descP.className = 'copier-desc';
-  descP.textContent =
-    "Copiez les affectations d'un mois précédent comme base pour " +
-    MN[S.m] + ' ' + S.y + '.';
-  box.appendChild(descP);
-
-  const row = document.createElement('div');
-  row.className = 'copier-selectors';
-
-  const yearSelect = document.createElement('select');
-  yearSelect.className = 'form-select copier-select-year';
-  const curYear = new Date().getFullYear();
-  for (let y = curYear - 1; y <= curYear + 1; y++) {
-    const o = document.createElement('option');
-    o.value = y;
-    o.textContent = y;
-    if (y === S.y) o.selected = true;
-    yearSelect.appendChild(o);
-  }
-
-  const monthSelect = document.createElement('select');
-  monthSelect.className = 'form-select copier-select-month';
-  // Par défaut : mois précédent
-  const defaultMonth = S.m === 0 ? 11 : S.m - 1;
-  MN.forEach((mn, i) => {
-    const o = document.createElement('option');
-    o.value = i;
-    o.textContent = mn;
-    if (i === defaultMonth) o.selected = true;
-    monthSelect.appendChild(o);
-  });
-
-  row.appendChild(yearSelect);
-  row.appendChild(monthSelect);
-  box.appendChild(row);
-
-  const warnDiv = document.createElement('div');
-  warnDiv.className = 'copier-warn';
-  warnDiv.textContent =
-    '⚠ Cette action remplacera le planning de ' +
-    MN[S.m] + ' ' + S.y + ' par une copie du mois sélectionné.';
-  box.appendChild(warnDiv);
-
-  const foot = document.createElement('div');
-  foot.className = 'modal-foot';
-  foot.appendChild(mBtn('Annuler', false, closeModal));
-  foot.appendChild(mBtn('Copier', true, () => {
-    const srcKey = yearSelect.value + '-' +
-      String(parseInt(monthSelect.value) + 1).padStart(2, '0');
-    const srcPl = S.pl[srcKey];
-    if (!srcPl || Object.keys(srcPl).length === 0) {
-      alert('Aucun planning trouvé pour ' +
-        MN[parseInt(monthSelect.value)] + ' ' + yearSelect.value);
-      return;
-    }
-    // Deep clone pour éviter la partage de référence
-    S.pl[mk()] = JSON.parse(JSON.stringify(srcPl));
-    save();
-    closeModal();
-  }));
-  box.appendChild(foot);
-}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MODAL — ⬇ Exporter (menu des 5 formats disponibles)
@@ -12753,9 +12865,9 @@ function mSaisie(box, asView) {
   });
   nextBtn.classList.add('btn-icon-sm');
 
-  const photoBtn = mBtn('📸 Lire une photo', false, () => {
+  const photoBtn = mBtn('📸 Lire la feuille de caisse', false, () => {
     saveSaisieForm(box, d);
-    S.modal = { type: 'pointage_pick', _fromSaisie: true, d: d };
+    S.modal = { type: 'feuille_pick', d: d };
     render();
   });
   photoBtn.classList.add('saisie-photo-btn');
@@ -13128,7 +13240,7 @@ function mSaisie(box, asView) {
   function recalcEnc() {
     let tc = 0, tr = 0;
     encRows.forEach(row => {
-      if (row.key === 'encaisser' || row.key === 'amex') return; // exclus de l'écart Clyo/Réel
+      if (!modeCompteDansEcart(row.key)) return;
       const vc = parseFloat((document.getElementById('clyo_' + row.key) || {}).value);
       if (!isNaN(vc)) tc += vc;
       const vr = parseFloat((document.getElementById('reel_' + row.key) || {}).value);
@@ -13180,7 +13292,7 @@ function mSaisie(box, asView) {
     // CA réel = total colonne Réel
     let caReel = 0, hasReel = false;
     encRows.forEach(row => {
-      if (row.key === 'encaisser' || row.key === 'amex') return; // exclus du contrôle de caisse
+      if (!modeCompteDansEcart(row.key)) return;
       const v = parseFloat((document.getElementById('reel_' + row.key) || {}).value);
       if (!isNaN(v)) { caReel += v; hasReel = true; }
     });
@@ -15571,17 +15683,35 @@ function doImportCA(data, force) {
     Object.keys(src).forEach(day => {
       const rec = src[day];
       // ── Heures par employé → S.real (en minutes) ──────────────────────
+      // Deux formats acceptés :
+      //   heures: { "<id>": 7.5 }                  (total décimal)
+      //   heures: { "<nom>": {arr:"08:00",dep:"15:30"} }  (horaires)
       if (rec.heures) {
-        Object.keys(rec.heures).forEach(eid => {
-          const eidN = parseInt(eid, 10);
+        Object.keys(rec.heures).forEach(key => {
+          const val = rec.heures[key];
+          // Résolution de l'employé : par id numérique ou par nom
+          let eidN = parseInt(key, 10);
+          if (isNaN(eidN)) {
+            const m = matchEmp(key);
+            if (!m) { hSkipped++; return; }
+            eidN = m.id;
+          }
           const dayN = parseInt(day, 10);
           const existing = getReal(yy, mm, dayN, eidN);
           if (!force && existing && existing.total != null) {
             hSkipped++; return;
           }
+          let arr = null, dep = null, total = null;
+          if (val && typeof val === 'object') {
+            arr = parseTime(val.arr);
+            dep = parseTime(val.dep);
+            if (arr != null && dep != null && dep > arr) total = dep - arr;
+            else if (val.total != null) total = Math.round(val.total * 60);
+          } else {
+            total = Math.round(val * 60);
+          }
           setReal(yy, mm, dayN, eidN, {
-            arr: null, dep: null,
-            total: Math.round(rec.heures[eid] * 60), note: ''
+            arr: arr, dep: dep, total: total, note: ''
           });
           hAdded++;
 
@@ -15618,9 +15748,32 @@ function doImportCA(data, force) {
       if (rec.clyo) {
         merged.clyo = Object.assign({}, base.clyo || {}, rec.clyo);
       }
+      // Serveurs : accepte les clés par id OU par nom
+      if (rec.serveurs) {
+        const sv = Object.assign({}, base.serveurs || {});
+        Object.keys(rec.serveurs).forEach(key => {
+          let eidN = parseInt(key, 10);
+          if (isNaN(eidN)) {
+            const m = matchEmp(key);
+            if (!m) return;
+            eidN = m.id;
+          }
+          sv[eidN] = rec.serveurs[key];
+        });
+        merged.serveurs = sv;
+      }
+      // Fonds de caisse, observations, annotations crédit/bons
+      ['fdcVeille', 'fdcJour', 'obs'].forEach(k => {
+        if (rec[k] !== undefined) merged[k] = rec[k];
+      });
+      if (rec.notesEnc) {
+        merged.notesEnc = Object.assign({}, base.notesEnc || {}, rec.notesEnc);
+      }
       if (rec.ca !== undefined || rec.couv !== undefined ||
           rec.reel || rec.clyo || rec.caN1 !== undefined ||
-          rec.couvN1 !== undefined) {
+          rec.couvN1 !== undefined || rec.serveurs ||
+          rec.fdcVeille !== undefined || rec.fdcJour !== undefined ||
+          rec.obs !== undefined) {
         S.daily[mk][day] = merged;
         added++;
       }
