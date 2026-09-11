@@ -1539,6 +1539,21 @@ table.grid {
   display: block; font-size: 12px; color: var(--text-3); margin-top: 2px;
 }
 
+/* Avenants : historique des heures de contrat */
+.av-note { margin: 0 0 8px; line-height: 1.45; }
+.av-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+.av-empty { font-size: 12px; color: var(--text-3); font-style: italic; }
+.av-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 11px; background: var(--surface-2); border-radius: 8px;
+  font-size: 13px;
+}
+.av-from { color: var(--text-2); }
+.av-h { font-weight: 700; color: var(--accent); margin-left: auto; margin-right: 6px; }
+.av-add { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.av-add select { min-width: 90px; }
+.av-h-input { max-width: 90px; }
+
 /* Bandeau de complétude du coût main-d'œuvre */
 .cost-banner {
   display: flex;
@@ -5161,8 +5176,8 @@ function dayLaborCost(year, month, day) {
       const sal = (e.salaire != null && e.salaire !== '') ? e.salaire : null;
       if (sal == null) {
         complet = false;
-      } else if (r && r.total != null && e.h) {
-        const tauxEff = sal / e.h;          // €/heure déduit du contrat
+      } else if (r && r.total != null && contratH(e, year, month)) {
+        const tauxEff = sal / contratH(e, year, month);          // €/heure déduit du contrat
         cout += h * tauxEff;
       } else {
         const nbJours = empWorkDaysInMonth(year, month, eid);
@@ -5227,13 +5242,46 @@ let HS_SEUIL_CONTRAT = parseInt(localStorage.getItem('hs_seuil'), 10) || 100;
    - hs : heures sup réelles (toujours calculées, pour info)
    - montant : 0 si type extra OU contrat > seuil (report fin d'année)
    - payableMensuel : true seulement si contrat ≤ seuil */
+/* ───────────────────────────────────────────────────────────────────────────
+   HISTORIQUE DES CONTRATS
+   ───────────────────────────────────────────────────────────────────────────
+   Un salarié peut changer d'heures de contrat au fil du temps (avenant
+   définitif ou temporaire). On stocke ces changements dans e.contrats :
+     contrats: [ { from: '2026-01', h: 104 }, { from: '2026-06', h: 151.67 } ]
+   La période court de 'from' jusqu'au 'from' suivant (ou indéfiniment).
+   Si e.contrats est absent, on retombe sur e.h (compatibilité).
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Heures de contrat applicables à un salarié pour un mois donné. */
+function contratH(emp, year, month) {
+  if (!emp) return 0;
+  const list = emp.contrats;
+  if (!Array.isArray(list) || !list.length) return emp.h || 0;
+  const key = year + '-' + String(month + 1).padStart(2, '0');
+  // Dernière période dont le début est <= au mois demandé
+  let val = null;
+  list.slice()
+    .sort((a, b) => String(a.from).localeCompare(String(b.from)))
+    .forEach(per => {
+      if (String(per.from) <= key) val = per.h;
+    });
+  // Aucun avenant encore en vigueur à cette date → contrat de base
+  if (val === null) return emp.h || 0;
+  return val || 0;
+}
+
+/* Heures de contrat applicables au mois actuellement affiché. */
+function contratHNow(emp) {
+  return contratH(emp, S.y, S.m);
+}
+
 function empHeuresSup(year, month, empId) {
   const e = findEmp(empId);
   if (!e || e.t === 'extra') {
     return { hs: 0, montant: 0, payableMensuel: false };
   }
   const real = empRealHoursMonth(year, month, empId);
-  const contrat = e.h || 0;
+  const contrat = contratH(e, year, month);
   const hs = Math.max(0, real - contrat);
   const taux = (e.tauxHS != null && e.tauxHS !== '') ? e.tauxHS : 0;
   // Au-delà du seuil : HS reportées en fin d'année → non payées mensuellement
@@ -6549,13 +6597,13 @@ function exportRecap() {
   S.emps.forEach(e => {
     const wj = workedDays(e.id);
     const hw = workedHours(e.id);
-    const diff = Math.round((hw - e.h) * 10) / 10;
+    const diff = Math.round((hw - contratHNow(e)) * 10) / 10;
     const cpd = getCp(e.id).length;
     const mald = getMal(e.id).length;
     rows.push([
       e.n, e.s === 'cuisine' ? 'Cuisine' : 'Salle',
       (e.t || 'contrat') === 'extra' ? 'Extra' : 'Contrat',
-      wj, maxDays, hw, e.h,
+      wj, maxDays, hw, contratHNow(e),
       (diff >= 0 ? '+' : '') + diff, cpd, mald
     ].map(csvEsc).join(','));
   });
@@ -7431,7 +7479,7 @@ function rHdr() {
         const h = empRealHoursMonth(S.y, S.m, S.searchEmp);
         const badge = document.createElement('span');
         badge.className = 'emp-search-hours';
-        const contrat = e.h || 0;
+        const contrat = contratHNow(e);
         const over = contrat && h > contrat;
         badge.innerHTML = '<b>' + (Math.round(h * 10) / 10) + 'h</b>' +
           (contrat ? ' / ' + contrat + 'h' : '');
@@ -7876,7 +7924,7 @@ function rHeures() {
     // Total réel / contrat
     const tdTot = document.createElement('td');
     tdTot.className = 'abs-td-total';
-    const target = e.h || 0;
+    const target = contratHNow(e);
     const diff = Math.round((totReel - target) * 10) / 10;
     const diffColor = diff > 0 ? '#e11d48' : (diff < 0 ? '#f59e0b' : '#16a34a');
     const reelR = Math.round(totReel * 10) / 10;
@@ -8579,7 +8627,7 @@ function rGrid() {
         // Cellule affectée (jour actif)
         const col = eColor(empId);
         const employee = findEmp(empId);
-        const isOverContract = employee && workedHours(empId) > employee.h;
+        const isOverContract = employee && workedHours(empId) > contratHNow(employee);
         const overDot = isOverContract
           ? "<span class='over-contract-dot'></span>" : '';
         td.innerHTML =
@@ -8776,8 +8824,8 @@ function rRecap() {
   let overContract = 0, underContract = 0, withAlerts = 0;
   S.emps.forEach(e => {
     const h = workedHours(e.id);
-    if (h > e.h * 1.05) overContract++;
-    else if (h < e.h * 0.7 && workedDays(e.id) > 0) underContract++;
+    if (h > contratHNow(e) * 1.05) overContract++;
+    else if (h < contratHNow(e) * 0.7 && workedDays(e.id) > 0) underContract++;
     if (legalAlerts(e.id).length) withAlerts++;
   });
 
@@ -8822,8 +8870,9 @@ function rRecap() {
   S.emps.forEach((e, i) => {
     const daysWorked = workedDays(e.id);
     const hoursWorked = workedHours(e.id);
-    const pct = Math.min(100, Math.round(hoursWorked / e.h * 100));
-    const diff = Math.round((hoursWorked - e.h) * 10) / 10;
+    const cH = contratHNow(e);
+    const pct = cH ? Math.min(100, Math.round(hoursWorked / cH * 100)) : 0;
+    const diff = Math.round((hoursWorked - cH) * 10) / 10;
     const cpDays  = getCp (e.id).filter(d => d >= 1 && d <= D).length;
     const malDays = getMal(e.id).filter(d => d >= 1 && d <= D).length;
     const alerts = legalAlerts(e.id);
@@ -9225,7 +9274,8 @@ function mAssign(box) {
 
       // Jauge d'heures : permet de voir qui est sous/au-dessus de son contrat
       const hW = workedHours(e.id);
-      const pctH = e.h ? Math.min(100, Math.round(hW / e.h * 100)) : 0;
+      const cH2 = contratHNow(e);
+      const pctH = cH2 ? Math.min(100, Math.round(hW / cH2 * 100)) : 0;
       const gaugeColor = pctH >= 100 ? '#16a34a' : pctH >= 70 ? '#3b82f6' : '#f59e0b';
 
       opt.innerHTML =
@@ -9387,20 +9437,30 @@ function buildEmpsSections() {
       card.appendChild(top);
 
       // Stats : heures contrat · salaire · priorité
-      const salTxt = (e.salaire != null && e.salaire !== '')
-        ? fmtEur(e.salaire)
-        : "<span class='emp-stat-val--missing'>à saisir</span>";
-      const salClass = (e.salaire != null && e.salaire !== '')
-        ? 'emp-stat-val' : '';
+      // Extra : payé à l'heure → on montre son taux horaire, pas un contrat.
+      const salTxt = isExtra
+        ? ((e.taux != null && e.taux !== '')
+            ? fmtEur(e.taux) + '/h'
+            : "<span class='emp-stat-val--missing'>à saisir</span>")
+        : ((e.salaire != null && e.salaire !== '')
+            ? fmtEur(e.salaire)
+            : "<span class='emp-stat-val--missing'>à saisir</span>");
+      const salClass = isExtra
+        ? ((e.taux != null && e.taux !== '') ? 'emp-stat-val' : '')
+        : ((e.salaire != null && e.salaire !== '') ? 'emp-stat-val' : '');
       const prio = e.prio !== undefined ? e.prio : '—';
 
       const stats = document.createElement('div');
       stats.className = 'emp-card-stats';
       stats.innerHTML =
-        "<div class='emp-stat'><div class='emp-stat-val'>" + (e.h || 0) +
-          "h</div><div class='emp-stat-lbl'>Contrat</div></div>" +
+        (isExtra
+          ? "<div class='emp-stat'><div class='emp-stat-val'>À l\u2019heure</div>" +
+            "<div class='emp-stat-lbl'>Paie</div></div>"
+          : "<div class='emp-stat'><div class='emp-stat-val'>" +
+            (e.h || 0) + "h</div><div class='emp-stat-lbl'>Contrat</div></div>") +
         "<div class='emp-stat'><div class='" + salClass + "'>" + salTxt +
-          "</div><div class='emp-stat-lbl'>Salaire</div></div>" +
+          "</div><div class='emp-stat-lbl'>" +
+          (isExtra ? 'Taux' : 'Salaire') + "</div></div>" +
         "<div class='emp-stat'><div class='emp-stat-val'>" + prio +
           "</div><div class='emp-stat-lbl'>Priorité</div></div>";
       card.appendChild(stats);
@@ -9666,11 +9726,112 @@ function mEditEmp(box) {
     "</tbody></table>";
 
   const cpRow = document.createElement('div');
-  cpRow.className = 'form-grid-3';
-  cpRow.appendChild(field('Heures / mois', hoursDiv));
+  // Les extras sont payés à l'heure réellement travaillée : pas d'heures
+  // de contrat mensuel à renseigner pour eux.
+  const isExtraType = (type === 'extra');
+  cpRow.className = isExtraType ? 'form-grid-2' : 'form-grid-3';
+  if (!isExtraType) cpRow.appendChild(field('Heures / mois', hoursDiv));
   cpRow.appendChild(field('CP annuels (j)', cpInput));
   cpRow.appendChild(field('Priorité (1→99)', prioWrap));
   form.appendChild(cpRow);
+
+  // ── Avenants : historique des heures de contrat par période ─────────────
+  if (type !== 'extra') {
+    const avTitle = document.createElement('div');
+    avTitle.className = 'form-section-sep';
+    avTitle.textContent = '📅 Avenants (changements d\u2019heures)';
+    form.appendChild(avTitle);
+
+    const avNote = document.createElement('div');
+    avNote.className = 'form-hint av-note';
+    avNote.innerHTML = 'Les heures ci-dessus s\u2019appliquent par défaut. ' +
+      'Ajoute un avenant pour qu\u2019un mois donné utilise d\u2019autres heures ' +
+      '— les mois passés gardent leur valeur d\u2019origine.';
+    form.appendChild(avNote);
+
+    const avList = document.createElement('div');
+    avList.className = 'av-list';
+    const periods = (S.modal._contrats !== undefined)
+      ? S.modal._contrats
+      : (baseEmp.contrats ? baseEmp.contrats.slice() : []);
+
+    if (!periods.length) {
+      const empty = document.createElement('div');
+      empty.className = 'av-empty';
+      empty.textContent = 'Aucun avenant — le contrat de ' +
+        (parseFloat(hoursInput.value) || tmpH) + ' h s\u2019applique à tous les mois.';
+      avList.appendChild(empty);
+    } else {
+      periods.slice()
+        .sort((a, b) => String(a.from).localeCompare(String(b.from)))
+        .forEach((per, idx) => {
+          const row = document.createElement('div');
+          row.className = 'av-row';
+          const parts = String(per.from).split('-');
+          const mLbl = (MN[parseInt(parts[1], 10) - 1] || '?') + ' ' + parts[0];
+          row.innerHTML = "<span class='av-from'>À partir de " + mLbl +
+            "</span><span class='av-h'>" + per.h + ' h</span>';
+          const rm = document.createElement('button');
+          rm.type = 'button';
+          rm.className = 'fix-tag-remove';
+          rm.innerHTML = '✕';
+          rm.onclick = () => {
+            S.modal._contrats = periods.filter(p => p !== per);
+            S.modal._name = nameInput.value;
+            S.modal._h = parseFloat(hoursInput.value) || 169;
+            refreshEmpForm();
+          };
+          row.appendChild(rm);
+          avList.appendChild(row);
+        });
+    }
+    form.appendChild(avList);
+
+    // Ligne d'ajout : mois de début + heures
+    const avAdd = document.createElement('div');
+    avAdd.className = 'av-add';
+    const avMois = document.createElement('select');
+    avMois.className = 'form-input--sm';
+    MN.forEach((mn, i) => {
+      const o = document.createElement('option');
+      o.value = i; o.textContent = mn;
+      if (i === S.m) o.selected = true;
+      avMois.appendChild(o);
+    });
+    const avAn = document.createElement('select');
+    avAn.className = 'form-input--sm';
+    for (let y = S.y - 2; y <= S.y + 2; y++) {
+      const o = document.createElement('option');
+      o.value = y; o.textContent = y;
+      if (y === S.y) o.selected = true;
+      avAn.appendChild(o);
+    }
+    const avH = document.createElement('input');
+    avH.type = 'number';
+    avH.className = 'form-input--sm av-h-input';
+    avH.placeholder = 'heures';
+    avH.min = '1'; avH.max = '230'; avH.step = '0.01';
+    const avBtn = document.createElement('button');
+    avBtn.type = 'button';
+    avBtn.className = 'btn bg btn-sm';
+    avBtn.textContent = '+ Ajouter';
+    avBtn.onclick = () => {
+      const hv = parseFloat(avH.value);
+      if (isNaN(hv) || hv <= 0) { toast('Indique un nombre d\u2019heures', 'inf'); return; }
+      const from = avAn.value + '-' + String(parseInt(avMois.value, 10) + 1).padStart(2, '0');
+      const next = periods.filter(p => String(p.from) !== from)
+        .concat([{ from: from, h: hv }]);
+      S.modal._contrats = next;
+      S.modal._name = nameInput.value;
+      S.modal._h = parseFloat(hoursInput.value) || 169;
+      refreshEmpForm();
+    };
+    avAdd.appendChild(avMois);
+    avAdd.appendChild(avAn);
+    avAdd.appendChild(avH);
+    avAdd.appendChild(avBtn);
+    form.appendChild(avAdd);
+  }
 
   // ── Rémunération (selon type : contrat = mensuel, extra = horaire) ───────
   const remuTitle = document.createElement('div');
@@ -10051,7 +10212,9 @@ function mEditEmp(box) {
         tel: telInput.value, email: emailInput.value,
         cpTotal: newCp, prio: newPrio, taux: newTaux,
         salaire: newSalaire, tauxHS: newTauxHS, primeCouv: newPrimeCouv,
-        inactif: statutChk.checked ? 1 : 0
+        inactif: statutChk.checked ? 1 : 0,
+        contrats: (S.modal._contrats !== undefined)
+          ? S.modal._contrats : (baseEmp.contrats || [])
       });
     } else {
       const emp = findEmp(S.modal.empId);
@@ -10076,6 +10239,7 @@ function mEditEmp(box) {
         emp.tauxHS  = newTauxHS;
         emp.primeCouv = newPrimeCouv;
         emp.inactif = statutChk.checked ? 1 : 0;
+        if (S.modal._contrats !== undefined) emp.contrats = S.modal._contrats;
       }
     }
     save();
@@ -11267,7 +11431,7 @@ function mDashboard(box) {
   let totHS = 0;
   S.emps.forEach(e => {
     const hReel = (empMin[e.id] || 0) / 60;
-    const contrat = e.h || 0;
+    const contrat = contratHNow(e);
     if (contrat > 0 && hReel > contrat) totHS += (hReel - contrat);
   });
 
@@ -11861,7 +12025,7 @@ function mFicheSalarie(box) {
       box.appendChild(head);
 
       const hReal = empRealHoursMonth(S.y, S.m, e.id);
-      const contrat = e.h || 0;
+      const contrat = contratH(e, S.y, S.m);
       const ecart = contrat ? hReal - contrat : null;
       const jours = joursTravailles(e.id);
 
@@ -11916,7 +12080,7 @@ function mFicheSalarie(box) {
     tb.appendChild(tr);
   }
   rows.forEach(({ e, h, j, sv }) => {
-    const contrat = e.h || 0;
+    const contrat = contratHNow(e);
     const ecart = contrat ? h - contrat : null;
     const col = eColor(e.id);
     const tr = document.createElement('tr');
@@ -12348,7 +12512,7 @@ function exportParEmploye() {
 
     const wj = workedDays(e.id);
     const hw = workedHours(e.id);
-    const diff = Math.round((hw - e.h) * 10) / 10;
+    const diff = Math.round((hw - contratHNow(e)) * 10) / 10;
     const cpCount  = getCp (e.id).filter(d => d >= 1 && d <= D).length;
     const malCount = getMal(e.id).filter(d => d >= 1 && d <= D).length;
     const col = ECOLS.filter(c => c.id === e.col)[0] ||
@@ -13838,7 +14002,7 @@ function mSaisieSynth(box) {
   sortedEmps.forEach(e => {
     const mins = empHours[e.id] || 0;
     const hReal = mins / 60;
-    const diff = hReal - e.h;
+    const diff = hReal - contratHNow(e);
     const col = eColor(e.id);
     const diffColor = diff >= 0 ? 'var(--success)' : 'var(--danger)';
     rows1 +=
@@ -14059,7 +14223,7 @@ function buildSynthText(y, m) {
     .sort((a, b) => (empHours[b.id] || 0) - (empHours[a.id] || 0))
     .forEach(e => {
       const hReal = (empHours[e.id] || 0) / 60;
-      const diff = hReal - e.h;
+      const diff = hReal - contratHNow(e);
       txt += e.n.padEnd(16) + ' : ' + hReal.toFixed(1) + 'h ' +
         '(contrat ' + e.h + 'h, ' + (diff >= 0 ? '+' : '') +
         diff.toFixed(1) + 'h)\n';
@@ -14729,7 +14893,7 @@ function mPaie(box) {
       }
     });
     const totalH = totalMin / 60;
-    const contrat = e.h || 0;
+    const contrat = contratHNow(e);
     const ecart = totalH - contrat;
     const sup = Math.max(0, ecart);
     const col = eColor(e.id);
