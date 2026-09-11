@@ -9474,6 +9474,14 @@ function buildEmpsSections() {
    survivre aux re-renders déclenchés par les boutons.
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* Rafraîchit uniquement le contenu de la fiche salarié, sans reconstruire
+   toute la page — évite le clignotement de la fenêtre à chaque clic. */
+function refreshEmpForm() {
+  const cur = document.querySelector('.mo');
+  if (cur) { cur.innerHTML = ''; mEditEmp(cur); }
+  else render();
+}
+
 function mEditEmp(box) {
   const isNew = S.modal.empId === 'new';
 
@@ -9578,7 +9586,7 @@ function mEditEmp(box) {
       S.modal._col  = cid;
       S.modal._name = nameInput.value;
       S.modal._h    = parseFloat(hoursInput.value) || 169;
-      render();
+      refreshEmpForm();
     })(c.id);
     picker.appendChild(swatch);
   });
@@ -9749,7 +9757,7 @@ function mEditEmp(box) {
       S.modal._t    = t;
       S.modal._name = nameInput.value;
       S.modal._h    = parseFloat(hoursInput.value) || 169;
-      render();
+      refreshEmpForm();
     })(tp);
     typeBtns.appendChild(btn);
   });
@@ -9778,7 +9786,7 @@ function mEditEmp(box) {
       S.modal._poly = false;  // Changement de section → polyvalence reset
       S.modal._name = nameInput.value;
       S.modal._h    = parseFloat(hoursInput.value) || 169;
-      render();
+      refreshEmpForm();
     })(se);
     secBtns.appendChild(btn);
   });
@@ -9806,7 +9814,7 @@ function mEditEmp(box) {
     S.modal._jours = S.modal._jours || [];
     S.modal._name  = nameInput.value;
     S.modal._h     = parseFloat(hoursInput.value) || 169;
-    render();
+    refreshEmpForm();
   };
   const jtDiv = document.createElement('div');
   jtDiv.appendChild(jtSelect);
@@ -9826,7 +9834,7 @@ function mEditEmp(box) {
         S.modal._jours = j;
         S.modal._name  = nameInput.value;
         S.modal._h     = parseFloat(hoursInput.value) || 169;
-        render();
+        refreshEmpForm();
       })(dv);
       pillsDiv.appendChild(pill);
     });
@@ -9849,7 +9857,7 @@ function mEditEmp(box) {
       S.modal._poly = polyChk.checked;
       S.modal._name = nameInput.value;
       S.modal._h    = parseFloat(hoursInput.value) || 169;
-      render();
+      refreshEmpForm();
     };
 
     const polySpan = document.createElement('span');
@@ -9937,7 +9945,7 @@ function mEditEmp(box) {
       S.modal._fixed = fixed.filter((_, j) => j !== i);
       S.modal._name  = nameInput.value;
       S.modal._h     = parseFloat(hoursInput.value) || 169;
-      render();
+      refreshEmpForm();
     })(idx);
     tag.appendChild(rmBtn);
     fixList.appendChild(tag);
@@ -9975,7 +9983,7 @@ function mEditEmp(box) {
     ]);
     S.modal._name = nameInput.value;
     S.modal._h    = parseFloat(hoursInput.value) || 169;
-    render();
+    refreshEmpForm();
   };
 
   fixRow.appendChild(dowSelect);
@@ -13354,7 +13362,9 @@ function mSaisie(box, asView) {
     });
     // CA déclaré = somme des CA serveurs
     let caDecl = 0, hasDecl = false;
-    saisieCtx()._presentIds.forEach(eid => {
+    const ctxC = saisieCtx();
+    if (!ctxC || !Array.isArray(ctxC._presentIds)) return; // saisie fermée
+    ctxC._presentIds.forEach(eid => {
       const el = document.getElementById('sv_ca_' + eid);
       if (el) { const v = parseFloat(el.value); if (!isNaN(v)) { caDecl += v; hasDecl = true; } }
     });
@@ -13394,10 +13404,13 @@ function mSaisie(box, asView) {
       const el = document.getElementById(id);
       if (el) el.oninput = recalcControle;
     });
-    saisieCtx()._presentIds.forEach(eid => {
-      const el = document.getElementById('sv_ca_' + eid);
-      if (el) { const prev = el.oninput; el.oninput = (e) => { if (prev) prev(e); recalcControle(); }; }
-    });
+    const ctxL = saisieCtx();
+    if (ctxL && Array.isArray(ctxL._presentIds)) {
+      ctxL._presentIds.forEach(eid => {
+        const el = document.getElementById('sv_ca_' + eid);
+        if (el) { const prev = el.oninput; el.oninput = (e) => { if (prev) prev(e); recalcControle(); }; }
+      });
+    }
     recalcControle();
   }, 60);
   const b5 = saisieBlock('📝 Observations');
