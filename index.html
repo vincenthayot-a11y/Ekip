@@ -1523,6 +1523,22 @@ table.grid {
   border-radius: 9px; padding: 10px 12px; margin: 0 0 10px;
 }
 
+/* Salarié parti de l'entreprise */
+.emp-card--inactif { opacity: .55; background: var(--surface-2); }
+.emp-badge--inactif {
+  background: #e5e7eb !important; color: #4b5563 !important;
+}
+.emp-statut-wrap {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 11px 13px; margin: 4px 0 2px;
+  background: var(--surface-2); border-radius: 10px;
+}
+.emp-statut-wrap input { width: 17px; height: 17px; margin-top: 2px; cursor: pointer; flex-shrink: 0; }
+.emp-statut-lbl { font-size: 13px; color: var(--text); cursor: pointer; line-height: 1.45; }
+.emp-statut-hint {
+  display: block; font-size: 12px; color: var(--text-3); margin-top: 2px;
+}
+
 /* Bandeau de complétude du coût main-d'œuvre */
 .cost-banner {
   display: flex;
@@ -4290,6 +4306,8 @@ function isTod(year, month, day) {
    - "custom"    : autorisé si dimanche (0) est dans ses jours configurés
    - "all"       : toujours autorisé */
 function canWork(employee, year, month, day) {
+  // Salarié parti de l'entreprise : jamais planifiable
+  if (employee.inactif) return false;
   const w = dow(year, month, day);
   const ferie = !!isFerie(year, month, day);
   if (employee.jt === 'weekdays') return !ferie && w >= 1 && w <= 5;
@@ -4350,6 +4368,13 @@ function setSlot(day, postCode, empId) {
   if (!S.pl[mk()][k]) S.pl[mk()][k] = {};
   S.pl[mk()][k][postCode] = empId;
   save();
+}
+
+/* Salariés actifs : exclut ceux marqués comme partis de l'entreprise.
+   Leur historique reste consultable, mais ils ne sont plus proposés
+   dans le planning ni dans les saisies. */
+function empsActifs() {
+  return S.emps.filter(e => !e.inactif);
 }
 
 function findEmp(empId) {
@@ -7377,7 +7402,7 @@ function rHdr() {
         sList.style.display = 'none';
         return;
       }
-      const matches = S.emps.filter(e => e.n.toLowerCase().indexOf(q) >= 0);
+      const matches = empsActifs().filter(e => e.n.toLowerCase().indexOf(q) >= 0);
       matches.slice(0, 8).forEach(e => {
         const col = eColor(e.id);
         const row = document.createElement('div');
@@ -9146,7 +9171,7 @@ function mAssign(box) {
   }
 
   // Liste des candidats éligibles
-  const available = S.emps.filter(e => canAssignPost(e, d, pc));
+  const available = empsActifs().filter(e => canAssignPost(e, d, pc));
 
   // Champ de recherche
   const search = document.createElement('input');
@@ -9309,7 +9334,11 @@ function buildEmpsSections() {
   scroll.className = 'emps-scroll emps-scroll--page';
 
   ['cuisine', 'salle'].forEach(section => {
-    const sectionEmps = S.emps.filter(e => e.s === section);
+    // Vue Équipe : on affiche tout le monde, y compris les salariés partis
+    // (badge « Parti »), mais en fin de liste.
+    const sectionEmps = S.emps.filter(e => e.s === section)
+      .slice()
+      .sort((a, b) => (a.inactif ? 1 : 0) - (b.inactif ? 1 : 0));
 
     const sectionDiv = document.createElement('div');
     sectionDiv.style.marginBottom = '18px';
@@ -9332,7 +9361,7 @@ function buildEmpsSections() {
       const isExtra = (e.t || 'contrat') === 'extra';
 
       const card = document.createElement('div');
-      card.className = 'emp-card';
+      card.className = 'emp-card' + (e.inactif ? ' emp-card--inactif' : '');
       card.style.borderLeftColor = col.bg;
 
       // Haut : pastille + nom + badges
@@ -9346,6 +9375,8 @@ function buildEmpsSections() {
       const badges = document.createElement('div');
       badges.className = 'emp-card-badges';
       badges.innerHTML =
+        (e.inactif
+          ? "<span class='emp-badge emp-badge--inactif'>Parti</span>" : '') +
         (isExtra
           ? "<span class='emp-badge emp-badge--extra'>Extra</span>"
           : "<span class='emp-badge emp-badge--contrat'>Contrat</span>") +
@@ -9500,6 +9531,26 @@ function mEditEmp(box) {
   // ── Nom ─────────────────────────────────────────────────────────────────
   const nameInput = makeInput(tmpName, 'Prenom ou nom');
   form.appendChild(field('Nom', nameInput));
+
+  // ── Statut actif / inactif ──────────────────────────────────────────────
+  // Un salarié inactif (parti de l'entreprise) n'apparaît plus dans le
+  // planning ni dans les listes de saisie, mais tout son historique
+  // (heures, CA, couverts) reste lisible dans les mois passés.
+  const statutWrap = document.createElement('div');
+  statutWrap.className = 'emp-statut-wrap';
+  const statutChk = document.createElement('input');
+  statutChk.type = 'checkbox';
+  statutChk.id = 'emp-inactif';
+  statutChk.checked = !!baseEmp.inactif;
+  const statutLbl = document.createElement('label');
+  statutLbl.className = 'emp-statut-lbl';
+  statutLbl.htmlFor = 'emp-inactif';
+  statutLbl.innerHTML = '<b>Salarié parti de l\u2019entreprise</b>' +
+    "<span class='emp-statut-hint'>Il n\u2019apparaîtra plus dans le planning " +
+    'ni dans les saisies, mais son historique est conservé.</span>';
+  statutWrap.appendChild(statutChk);
+  statutWrap.appendChild(statutLbl);
+  form.appendChild(statutWrap);
 
   // ── Tel / Email ─────────────────────────────────────────────────────────
   const telInput   = makeInput(baseEmp.tel   || '', 'ex: 0696 xx xx xx');
@@ -9991,7 +10042,8 @@ function mEditEmp(box) {
         ec: newEc ? 1 : 0, col: newCol, fixed: newFixed,
         tel: telInput.value, email: emailInput.value,
         cpTotal: newCp, prio: newPrio, taux: newTaux,
-        salaire: newSalaire, tauxHS: newTauxHS, primeCouv: newPrimeCouv
+        salaire: newSalaire, tauxHS: newTauxHS, primeCouv: newPrimeCouv,
+        inactif: statutChk.checked ? 1 : 0
       });
     } else {
       const emp = findEmp(S.modal.empId);
@@ -10015,6 +10067,7 @@ function mEditEmp(box) {
         emp.salaire = newSalaire;
         emp.tauxHS  = newTauxHS;
         emp.primeCouv = newPrimeCouv;
+        emp.inactif = statutChk.checked ? 1 : 0;
       }
     }
     save();
@@ -10095,14 +10148,17 @@ function mIndispos(box) {
     }
   });
 
-  // Filtrage employés
-  let emps = S.emps;
+  // Filtrage employés (les salariés partis restent visibles s'ils ont
+  // des heures sur le mois affiché, pour garder l'historique lisible)
+  const empsBase = S.emps.filter(e =>
+    !e.inactif || empRealHoursMonth(S.y, S.m, e.id) > 0);
+  let emps = empsBase;
   if (filter === 'cuisine') {
-    emps = S.emps.filter(e => e.s === 'cuisine');
+    emps = empsBase.filter(e => e.s === 'cuisine');
   } else if (filter === 'salle') {
-    emps = S.emps.filter(e => e.s === 'salle');
+    emps = empsBase.filter(e => e.s === 'salle');
   } else if (filter === 'avecindispos') {
-    emps = S.emps.filter(e =>
+    emps = empsBase.filter(e =>
       getInd(e.id).filter(d => d >= 1 && d <= D).length > 0 ||
       getCp(e.id).length > 0 ||
       getMal(e.id).length > 0 ||
@@ -13450,7 +13506,7 @@ function makeAddPresentRow(d, section) {
   wrap.appendChild(list);
 
   function candidates() {
-    return S.emps
+    return empsActifs()
       .filter(e => saisieCtx()._presentIds.indexOf(e.id) < 0)
       .filter(e => {
         if (section === 'tous') return true;
