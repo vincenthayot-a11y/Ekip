@@ -1569,6 +1569,28 @@ table.grid {
   font-family: inherit; font-size: 12.5px; color: var(--text-2, #6b7280);
   transition: background .12s, border-color .12s;
 }
+/* Répartition des dépenses par nature */
+.dep-nature { margin-bottom: 10px; }
+.dep-nature-top {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 10px; margin-bottom: 4px;
+}
+.dep-nature-lbl { font-size: 13px; color: var(--text); }
+.dep-nature-n { color: var(--text-3); font-size: 11px; }
+.dep-nature-mt { font-size: 13px; font-variant-numeric: tabular-nums; }
+.dep-nature-bar {
+  height: 6px; background: var(--surface-2); border-radius: 20px;
+  overflow: hidden;
+}
+.dep-nature-bar span {
+  display: block; height: 100%; background: var(--accent);
+  border-radius: 20px;
+}
+.suivi-item--warn { background: #fffbf0; }
+/* Tableau CA annuel : première colonne plus large pour les noms de mois */
+.ca-an-table th:first-child,
+.ca-an-table td:first-child { width: 110px; }
+
 /* Dépôt en banque */
 .depot-block {
   background: #f0f7f3; border: 1px solid #cfe3d6;
@@ -8241,6 +8263,10 @@ function rRapports() {
         desc: 'CA, couverts, ticket moyen et comparaison N-1.' },
       { icon: '💳', title: 'Encaissements du mois', rap: 'encMois',
         desc: 'Détail jour par jour de tous les modes de paiement.' },
+      { icon: '📆', title: 'CA annuel', rap: 'caAnnuel',
+        desc: 'Les 12 mois de l\u2019année, avec comparaison N-1 et ticket moyen.' },
+      { icon: '💸', title: 'Dépenses du mois', rap: 'depensesMois',
+        desc: 'Total, répartition par nature et suivi des factures manquantes.' },
       { icon: '🧾', title: 'Suivi crédits & notes', rap: 'suiviCredits',
         desc: 'Crédits, bons cadeaux, dépenses et observations — recherche par mot-clé.' }
     ]},
@@ -8308,7 +8334,9 @@ function rRapportDetail() {
     stats: '📊 Statistiques postes',
     suiviCredits: '🧾 Suivi crédits & notes',
     ficheSalarie: '👤 Fiche par salarié',
-    encMois: '💳 Encaissements du mois'
+    encMois: '💳 Encaissements du mois',
+    caAnnuel: '📆 CA annuel',
+    depensesMois: '💸 Dépenses du mois'
   };
   const rap = S.rapType || 'dashboard';
 
@@ -8327,10 +8355,13 @@ function rRapportDetail() {
   outer.appendChild(bar);
 
   // Sélecteur de période (sauf suiviCredits qui a sa propre portée + recherche)
-  if (rap !== 'suiviCredits' && rap !== 'annuel') {
-    outer.appendChild(buildPeriodSelector());
-  } else if (rap === 'annuel') {
+  // Rapports annuels → sélecteur d'année ; mensuels → sélecteur de mois ;
+  // le suivi a sa propre portée (mois / année / tout).
+  const rapAnnuels = ['annuel', 'caAnnuel'];
+  if (rapAnnuels.indexOf(rap) >= 0) {
     outer.appendChild(buildYearSelector());
+  } else if (rap !== 'suiviCredits') {
+    outer.appendChild(buildPeriodSelector());
   }
 
   // Conteneur du rapport
@@ -8346,6 +8377,8 @@ function rRapportDetail() {
     else if (rap === 'suiviCredits') mSuiviCredits(content);
     else if (rap === 'ficheSalarie') mFicheSalarie(content);
     else if (rap === 'encMois')      mEncMois(content);
+    else if (rap === 'caAnnuel')     mCaAnnuel(content);
+    else if (rap === 'depensesMois') mDepensesMois(content);
   } finally {
     S._rapView = false;
   }
@@ -12000,13 +12033,72 @@ function mRapCA(box) {
     'Aucun encaissement r\u00e9el saisi ce mois.</p>';
   box.appendChild(payWrap);
 
+  // ── Comparaison N-1 par jour de semaine ───────────────────────────────
+  // Permet de voir quels jours progressent ou reculent d'une année sur
+  // l'autre (ex. les dimanches en hausse, les mardis en baisse).
+  const jsTitle = document.createElement('div');
+  jsTitle.className = 'form-section-sep';
+  jsTitle.textContent = 'Par jour de semaine — vs ' + (S.y - 1);
+  box.appendChild(jsTitle);
+
+  const parJour = [];
+  for (let w = 0; w < 7; w++) parJour.push({ ca: 0, caN1: 0, cv: 0, cvN1: 0, n: 0 });
+  const Dm = dim(S.y, S.m);
+  for (let d = 1; d <= Dm; d++) {
+    const w = dow(S.y, S.m, d);
+    const dd = getDaily(S.y, S.m, d);
+    const dn = getDailyN1(S.y, S.m, d);
+    if (dd && dd.ca) { parJour[w].ca += dd.ca; parJour[w].n++; }
+    if (dd && dd.couv) parJour[w].cv += dd.couv;
+    if (dn && dn.ca) parJour[w].caN1 += dn.ca;
+    if (dn && dn.couv) parJour[w].cvN1 += dn.couv;
+  }
+  const jsTbl = document.createElement('table');
+  jsTbl.className = 'caisse-table';
+  let jsHtml = '<thead><tr><th>Jour</th><th>CA ' + S.y + '</th><th>CA ' +
+    (S.y - 1) + '</th><th>Évol.</th><th>Couverts</th><th>Ticket moy.</th>' +
+    '</tr></thead><tbody>';
+  const ordre = [1, 2, 3, 4, 5, 6, 0];   // lundi → dimanche
+  let aDesDonnees = false;
+  ordre.forEach(w => {
+    const p = parJour[w];
+    if (!p.ca && !p.caN1) return;
+    aDesDonnees = true;
+    const ev = p.caN1 ? ((p.ca - p.caN1) / p.caN1) * 100 : null;
+    const tm = p.cv ? p.ca / p.cv : 0;
+    const cls = ev === null ? '' : ev >= 5 ? 'saisie-ec-ok'
+      : ev <= -5 ? 'saisie-ec-bad' : 'saisie-ec-warn';
+    jsHtml += '<tr><td style="text-align:left"><b>' + DN[w] + '</b></td>' +
+      '<td>' + (p.ca ? fmtEur(p.ca) : '—') + '</td>' +
+      '<td>' + (p.caN1 ? fmtEur(p.caN1) : '—') + '</td>' +
+      '<td class="' + cls + '">' +
+        (ev === null ? '—' : (ev >= 0 ? '+' : '') + ev.toFixed(1) + '%') + '</td>' +
+      '<td>' + (p.cv || '—') + '</td>' +
+      '<td>' + (tm ? fmtEur(tm) : '—') + '</td></tr>';
+  });
+  jsHtml += '</tbody>';
+  if (aDesDonnees) {
+    jsTbl.innerHTML = jsHtml;
+    const jsWrap = document.createElement('div');
+    jsWrap.className = 'caisse-table-wrap';
+    jsWrap.appendChild(jsTbl);
+    box.appendChild(jsWrap);
+  } else {
+    const e = document.createElement('p');
+    e.style.cssText = 'padding:14px;color:#9ca3af;font-size:13px;margin:0';
+    e.textContent = 'Pas assez de données pour comparer les jours de semaine.';
+    box.appendChild(e);
+  }
+
   const foot = document.createElement('div');
   foot.className = 'modal-foot';
   foot.appendChild(mBtn('Fermer', false, closeModal));
   const printBtn = mBtn('\uD83D\uDDA8 Imprimer', true, () => {
     printReportHTML('Synth\u00e8se CA', cmp.outerHTML +
       '<h2>Modes de paiement</h2>' +
-      (hasPay ? payHtml : '<p>Aucun encaissement r\u00e9el saisi.</p>'));
+      (hasPay ? payHtml : '<p>Aucun encaissement r\u00e9el saisi.</p>') +
+      '<h2>Par jour de semaine</h2>' +
+      (aDesDonnees ? jsTbl.outerHTML : '<p>Pas assez de données.</p>'));
   });
   foot.appendChild(printBtn);
   box.appendChild(foot);
@@ -12551,6 +12643,268 @@ function mEncMois(box) {
   note.textContent = 'Seuls les modes utilisés ce mois sont affichés. ' +
     'Clique une ligne pour ouvrir la saisie du jour.';
   box.appendChild(note);
+
+  const foot = document.createElement('div');
+  foot.className = 'modal-foot--end-only';
+  foot.appendChild(mBtn('Fermer', false, closeModal));
+  box.appendChild(foot);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RAPPORT — CA annuel : 12 mois en ligne, avec comparaison N-1
+   ═══════════════════════════════════════════════════════════════════════════ */
+function mCaAnnuel(box) {
+  box.classList.add('mo--stats');
+  const eur = (n) => n
+    ? Math.round(n).toLocaleString('fr-FR') + ' €' : '—';
+  const eur0 = (n) => Math.round(n).toLocaleString('fr-FR');
+
+  // Agrégats par mois pour une année donnée
+  const totauxMois = (an, mo) => {
+    const D = dim(an, mo);
+    let ca = 0, couv = 0, jours = 0;
+    for (let d = 1; d <= D; d++) {
+      const dd = getDaily(an, mo, d);
+      if (!dd) continue;
+      if (dd.ca) { ca += dd.ca; jours++; }
+      if (dd.couv) couv += dd.couv;
+    }
+    return { ca, couv, jours };
+  };
+
+  const lignes = [];
+  let totCA = 0, totCouv = 0, totCAn1 = 0, totCouvN1 = 0, totJours = 0;
+  for (let mo = 0; mo < 12; mo++) {
+    const cur = totauxMois(S.y, mo);
+    const n1 = totauxMois(S.y - 1, mo);
+    totCA += cur.ca; totCouv += cur.couv; totJours += cur.jours;
+    totCAn1 += n1.ca; totCouvN1 += n1.couv;
+    lignes.push({ mo, cur, n1 });
+  }
+
+  // ── Synthèse de l'année ───────────────────────────────────────────────
+  const evolAn = totCAn1 ? ((totCA - totCAn1) / totCAn1) * 100 : null;
+  const tmAn = totCouv ? totCA / totCouv : 0;
+  const synth = document.createElement('div');
+  synth.className = 'enc-synth';
+  const card = (lbl, val, cls) =>
+    "<div class='enc-synth-card " + (cls || '') + "'>" +
+    "<div class='enc-synth-val'>" + val + '</div>' +
+    "<div class='enc-synth-lbl'>" + lbl + '</div></div>';
+  synth.innerHTML =
+    card('CA ' + S.y, eur(totCA)) +
+    card('CA ' + (S.y - 1), eur(totCAn1)) +
+    card('Évolution', evolAn === null ? '—'
+      : (evolAn >= 0 ? '+' : '') + evolAn.toFixed(1) + '%',
+      evolAn === null ? '' : evolAn >= 0 ? 'is-ok' : 'is-bad') +
+    card('Couverts', totCouv ? totCouv.toLocaleString('fr-FR') : '—') +
+    card('Ticket moyen', tmAn ? eur0(tmAn) + ' €' : '—');
+  box.appendChild(synth);
+
+  // ── Tableau mois par mois ─────────────────────────────────────────────
+  const scroll = document.createElement('div');
+  scroll.className = 'enc-mois-scroll';
+  const tbl = document.createElement('table');
+  tbl.className = 'enc-mois-table ca-an-table';
+  tbl.innerHTML =
+    '<thead><tr>' +
+      '<th class="enc-sticky">Mois</th>' +
+      '<th class="enc-sep">CA ' + S.y + '</th>' +
+      '<th>CA ' + (S.y - 1) + '</th>' +
+      '<th>Évol.</th>' +
+      '<th class="enc-sep">Couverts</th>' +
+      '<th>Couv. ' + (S.y - 1) + '</th>' +
+      '<th>Évol.</th>' +
+      '<th class="enc-sep">Ticket moyen</th>' +
+      '<th>Jours</th>' +
+    '</tr></thead>';
+
+  const tb = document.createElement('tbody');
+  lignes.forEach(({ mo, cur, n1 }) => {
+    const vide = !cur.ca && !n1.ca;
+    const tr = document.createElement('tr');
+    tr.className = 'enc-mois-row' + (vide ? ' enc-mois-row--vide' : '');
+    const evol = n1.ca ? ((cur.ca - n1.ca) / n1.ca) * 100 : null;
+    const evolC = n1.couv ? ((cur.couv - n1.couv) / n1.couv) * 100 : null;
+    const tm = cur.couv ? cur.ca / cur.couv : 0;
+    const pill = (v) => {
+      if (v === null) return '<span class="enc-na">·</span>';
+      const cls = v >= 5 ? 'is-ok' : v <= -5 ? 'is-bad' : 'is-warn';
+      return '<span class="enc-pill ' + cls + '">' +
+        (v >= 0 ? '+' : '') + v.toFixed(1) + '%</span>';
+    };
+    tr.innerHTML =
+      '<td class="enc-sticky enc-jour"><b>' + MN[mo] + '</b></td>' +
+      '<td class="enc-sep"><b>' + eur(cur.ca) + '</b></td>' +
+      '<td>' + eur(n1.ca) + '</td>' +
+      '<td>' + pill(evol) + '</td>' +
+      '<td class="enc-sep">' + (cur.couv || '—') + '</td>' +
+      '<td>' + (n1.couv || '—') + '</td>' +
+      '<td>' + pill(evolC) + '</td>' +
+      '<td class="enc-sep">' + (tm ? eur0(tm) + ' €' : '—') + '</td>' +
+      '<td>' + (cur.jours || '—') + '</td>';
+    tr.title = 'Voir ' + MN[mo] + ' ' + S.y;
+    tr.onclick = ((m2) => () => {
+      S.m = m2; S.rapType = 'encMois'; render();
+    })(mo);
+    tb.appendChild(tr);
+  });
+  tbl.appendChild(tb);
+
+  const tf = document.createElement('tfoot');
+  const tmT = totCouv ? totCA / totCouv : 0;
+  tf.innerHTML = '<tr>' +
+    '<td class="enc-sticky">TOTAL</td>' +
+    '<td class="enc-sep">' + eur(totCA) + '</td>' +
+    '<td>' + eur(totCAn1) + '</td>' +
+    '<td>' + (evolAn === null ? '·'
+      : (evolAn >= 0 ? '+' : '') + evolAn.toFixed(1) + '%') + '</td>' +
+    '<td class="enc-sep">' + (totCouv || '—') + '</td>' +
+    '<td>' + (totCouvN1 || '—') + '</td>' +
+    '<td>' + (totCouvN1 ? (((totCouv - totCouvN1) / totCouvN1) * 100 >= 0 ? '+' : '') +
+      (((totCouv - totCouvN1) / totCouvN1) * 100).toFixed(1) + '%' : '·') + '</td>' +
+    '<td class="enc-sep">' + (tmT ? eur0(tmT) + ' €' : '—') + '</td>' +
+    '<td>' + (totJours || '—') + '</td>' +
+    '</tr>';
+  tbl.appendChild(tf);
+  scroll.appendChild(tbl);
+  box.appendChild(scroll);
+
+  const note = document.createElement('p');
+  note.className = 'enc-mois-note';
+  note.textContent = 'Clique un mois pour ouvrir le détail de ses encaissements.';
+  box.appendChild(note);
+
+  const foot = document.createElement('div');
+  foot.className = 'modal-foot--end-only';
+  foot.appendChild(mBtn('Fermer', false, closeModal));
+  box.appendChild(foot);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RAPPORT — Dépenses du mois : total, répartition, factures manquantes
+   ═══════════════════════════════════════════════════════════════════════════ */
+function mDepensesMois(box) {
+  box.classList.add('mo--stats');
+  const D = dim(S.y, S.m);
+  const eur2 = (n) => n.toLocaleString('fr-FR',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+
+  // Collecte de toutes les dépenses du mois
+  const items = [];
+  for (let d = 1; d <= D; d++) {
+    const dd = getDaily(S.y, S.m, d);
+    if (!dd) continue;
+    if (Array.isArray(dd.depensesList)) {
+      dd.depensesList.forEach((it, i) => {
+        if (it.montant) items.push({ d, idx: i, montant: it.montant,
+          note: it.note || '', facture: !!it.facture });
+      });
+    } else if (dd.reel && dd.reel.depenses) {
+      items.push({ d, idx: null, montant: dd.reel.depenses,
+        note: (dd.notesEnc && dd.notesEnc.depenses && dd.notesEnc.depenses.note) || '',
+        facture: false });
+    }
+  }
+
+  const total = items.reduce((a, it) => a + it.montant, 0);
+  const avecF = items.filter(it => it.facture);
+  const sansF = items.filter(it => !it.facture);
+  const totAvec = avecF.reduce((a, it) => a + it.montant, 0);
+  const totSans = sansF.reduce((a, it) => a + it.montant, 0);
+
+  const synth = document.createElement('div');
+  synth.className = 'enc-synth';
+  const card = (lbl, val, cls) =>
+    "<div class='enc-synth-card " + (cls || '') + "'>" +
+    "<div class='enc-synth-val'>" + val + '</div>' +
+    "<div class='enc-synth-lbl'>" + lbl + '</div></div>';
+  synth.innerHTML =
+    card('Total du mois', total ? eur2(total) : '—') +
+    card('Nombre', items.length || '—') +
+    card('Avec facture', totAvec ? eur2(totAvec) : '—', totAvec ? 'is-ok' : '') +
+    card('Sans facture', totSans ? eur2(totSans) : '—', totSans ? 'is-warn' : 'is-ok');
+  box.appendChild(synth);
+
+  if (!items.length) {
+    const e = document.createElement('p');
+    e.className = 'suivi-empty';
+    e.textContent = 'Aucune dépense sur ' + MN[S.m] + ' ' + S.y + '.';
+    box.appendChild(e);
+    const f0 = document.createElement('div');
+    f0.className = 'modal-foot--end-only';
+    f0.appendChild(mBtn('Fermer', false, closeModal));
+    box.appendChild(f0);
+    return;
+  }
+
+  // ── Répartition par nature (regroupe les notes identiques) ────────────
+  const parNature = {};
+  items.forEach(it => {
+    const cle = (it.note || 'Sans libellé').trim().toLowerCase();
+    if (!parNature[cle]) parNature[cle] = { label: it.note || 'Sans libellé', total: 0, n: 0 };
+    parNature[cle].total += it.montant;
+    parNature[cle].n++;
+  });
+  const natures = Object.keys(parNature).map(k => parNature[k])
+    .sort((a, b) => b.total - a.total);
+
+  const secN = document.createElement('div');
+  secN.className = 'suivi-section';
+  secN.innerHTML = '<h4 class="suivi-h">Répartition par nature</h4>';
+  natures.forEach(n => {
+    const pct = total ? (n.total / total) * 100 : 0;
+    const row = document.createElement('div');
+    row.className = 'dep-nature';
+    row.innerHTML =
+      "<div class='dep-nature-top'>" +
+        "<span class='dep-nature-lbl'>" + escapeHtml(n.label) +
+        (n.n > 1 ? " <span class='dep-nature-n'>×" + n.n + '</span>' : '') + '</span>' +
+        "<b class='dep-nature-mt'>" + eur2(n.total) + '</b></div>' +
+      "<div class='dep-nature-bar'><span style='width:" + pct.toFixed(1) +
+        "%'></span></div>";
+    secN.appendChild(row);
+  });
+  box.appendChild(secN);
+
+  // ── Liste détaillée, factures manquantes en premier ───────────────────
+  const secL = document.createElement('div');
+  secL.className = 'suivi-section';
+  secL.innerHTML = '<h4 class="suivi-h">Détail — ' + items.length +
+    ' dépense' + (items.length > 1 ? 's' : '') +
+    (sansF.length ? '<span class="suivi-count suivi-count--warn">' +
+      sansF.length + ' sans facture</span>' : '') + '</h4>';
+  items.slice().sort((a, b) => (a.facture ? 1 : 0) - (b.facture ? 1 : 0) || a.d - b.d)
+    .forEach(it => {
+      const row = document.createElement('div');
+      row.className = 'suivi-item' + (it.facture ? '' : ' suivi-item--warn');
+      row.innerHTML =
+        "<div class='suivi-item-main'>" +
+        "<span class='suivi-date'>" + String(it.d).padStart(2, '0') + '/' +
+          String(S.m + 1).padStart(2, '0') + '</span>' +
+        "<span class='suivi-montant'>" + eur2(it.montant) + '</span>' +
+        (it.note ? "<span class='suivi-note'>" + escapeHtml(it.note) + '</span>'
+                 : "<span class='suivi-note suivi-note--empty'>(sans libellé)</span>") +
+        '</div>';
+      const fb = document.createElement('button');
+      fb.type = 'button';
+      fb.className = 'depot-fact-btn' + (it.facture ? ' is-on' : '');
+      fb.textContent = it.facture ? '📎 Facture' : 'Sans facture';
+      fb.onclick = ((jour, index) => () => {
+        const dj = getDaily(S.y, S.m, jour);
+        if (!dj || !Array.isArray(dj.depensesList) || index === null) return;
+        const cible = dj.depensesList[index];
+        if (!cible) return;
+        cible.facture = !cible.facture;
+        setDaily(S.y, S.m, jour, dj);
+        save();
+        render();
+      })(it.d, it.idx);
+      row.appendChild(fb);
+      row.style.cursor = 'default';
+      secL.appendChild(row);
+    });
+  box.appendChild(secL);
 
   const foot = document.createElement('div');
   foot.className = 'modal-foot--end-only';
