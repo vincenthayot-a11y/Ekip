@@ -1642,6 +1642,37 @@ table.grid {
 .depot-fact-btn:hover { border-color: var(--border-strong); }
 .depot-fact-btn.is-on { background: var(--success-soft); color: var(--success); }
 
+/* Case « Plonge » dans la saisie : exclut du partage des couverts */
+.plonge-chk {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;
+  font-size: 10px; padding: 2px 8px; border-radius: 12px;
+  border: 1px solid var(--border, #e5e7eb); background: #f8fafc;
+  color: #64748b; cursor: pointer; white-space: nowrap;
+  transition: all .12s;
+}
+.plonge-chk input { width: 13px; height: 13px; margin: 0; cursor: pointer; }
+.plonge-chk.is-on {
+  background: #e0f2fe; border-color: transparent; color: #0369a1;
+  font-weight: 600;
+}
+
+/* Partage des couverts (prime) — case dans le bloc Salle */
+.partage-couv {
+  display: flex; align-items: flex-start; gap: 10px; cursor: pointer;
+  padding: 10px 12px; margin-bottom: 10px; border-radius: 10px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  transition: all .12s;
+}
+.partage-couv input { width: 17px; height: 17px; margin-top: 1px; cursor: pointer; flex-shrink: 0; }
+.partage-couv b { font-size: 13px; color: var(--text); display: block; }
+.partage-couv-hint {
+  display: block; font-size: 12px; color: var(--text-3); margin-top: 2px;
+}
+.partage-couv.is-on {
+  background: var(--accent-soft); border-color: transparent;
+}
+.partage-couv.is-on b { color: var(--accent); }
+
 /* Dépenses du jour — liste multi-lignes */
 .dep-block {
   margin-top: 12px; padding: 11px 13px;
@@ -5594,6 +5625,17 @@ function nbServeursEligibles(year, month, day) {
   return n;
 }
 
+/* Le partage des couverts est-il actif ce jour ?
+   Par défaut le dimanche, mais activable/désactivable jour par jour depuis
+   la saisie (champ dd.partageCouv : true / false / absent = automatique). */
+function partageCouvActif(year, month, day) {
+  const dd = getDaily(year, month, day);
+  if (dd && dd.partageCouv !== undefined && dd.partageCouv !== null) {
+    return !!dd.partageCouv;
+  }
+  return dow(year, month, day) === 0;   // par défaut : dimanche
+}
+
 /* Couverts attribués à un serveur un jour donné, pour le calcul de prime :
    - dimanche : sa part = couverts du jour ÷ nb personnes en salle présentes,
      à condition que le serveur soit lui-même présent (heures réelles) ce jour
@@ -5606,11 +5648,14 @@ function couvertsPrimeJour(year, month, day, empId) {
   if (PRIME_EXCLUS_IDS.indexOf(empId) >= 0) return 0;   // Doro, Vincent exclus
   const dd = getDaily(year, month, day);
   if (!dd) return 0;
-  const isDimanche = dow(year, month, day) === 0;
-  if (isDimanche) {
-    // Le serveur doit être présent ce dimanche (heures réelles saisies)
+  if (partageCouvActif(year, month, day)) {
+    // Le serveur doit être présent ce jour (heures réelles saisies)
     const r = getReal(year, month, day, empId);
     if (!r || r.total == null || r.total <= 0) return 0;
+    // …et avoir réellement travaillé EN SALLE ce jour-là : un polyvalent
+    // basculé en cuisine ne touche pas la prime (il sort aussi du diviseur).
+    if (realSect(year, month, day, empId) !== 'salle') return 0;
+    if (estPlongeur(e)) return 0;
     const totCouv = dd.couv || 0;
     const nbElig = nbServeursEligibles(year, month, day);
     return nbElig > 0 ? totCouv / nbElig : 0;
@@ -14104,8 +14149,12 @@ function mSaisie(box, asView) {
   const cuisineIds = saisieCtx()._presentIds.filter(id => {
     const e = findEmp(id); return e && sectionDuJour(id) === 'cuisine';
   });
+  // La plonge est rattachée au bloc Salle (elle n'entre pas dans le partage
+  // des couverts, mais ses heures se saisissent au même endroit).
   const salleIds = saisieCtx()._presentIds.filter(id => {
-    const e = findEmp(id); return e && sectionDuJour(id) === 'salle';
+    const e = findEmp(id);
+    const sc = sectionDuJour(id);
+    return e && (sc === 'salle' || sc === 'plonge');
   });
 
   // Construit une ligne d'heures (arrivée/départ/total) réutilisable.
@@ -14178,27 +14227,32 @@ function mSaisie(box, asView) {
     nameTd.className = 'saisie-name';
     nameTd.innerHTML = "<span class='emp-dot' style='background:" + col.bg +
       ';border:2px solid ' + col.text + "'></span>" + e.n;
-    if (e.ec) {
-      const cur = sectionDuJour(eid);
-      const tog = document.createElement('button');
-      tog.type = 'button';
-      tog.textContent = cur === 'cuisine' ? '→ salle' : '→ cuisine';
-      tog.title = 'Basculer la section de ce salarié pour ce jour';
-      tog.style.cssText =
-        'margin-left:8px;font-size:10px;padding:1px 7px;border-radius:8px;' +
-        'border:1px solid var(--border,#e5e7eb);background:#f8fafc;' +
-        'cursor:pointer;color:#475569';
-      tog.onclick = () => {
-        const box = document.querySelector('.mo');
+    // Case « Plonge » : proposée uniquement aux salariés de salle autorisés
+    // au poste Plonge (liste de postes vide = tous les postes de salle).
+    // Cochée, le salarié sort du partage des couverts ce jour-là.
+    const rsL = e.rs || [];
+    const peutPlonger = (rsL.length === 0 || rsL.indexOf('PL') >= 0);
+    if (e.s === 'salle' && peutPlonger && sectionDuJour(eid) !== 'cuisine') {
+      const enPlonge = realSect(S.y, S.m, d, eid) === 'plonge';
+      const lbl = document.createElement('label');
+      lbl.className = 'plonge-chk' + (enPlonge ? ' is-on' : '');
+      lbl.title = 'Ce salarié fait la plonge ce jour — exclu du partage des couverts';
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.checked = enPlonge;
+      chk.onchange = () => {
+        const box = document.querySelector('.saisie-form') ||
+          document.querySelector('.mo');
         if (box) saveSaisieForm(box, d);
-        const next = cur === 'cuisine' ? 'salle' : 'cuisine';
         const prev = getReal(S.y, S.m, d, eid) || {
           arr: null, dep: null, total: null, note: '' };
-        const sectMarker = (next === e.s) ? null : next;
-        setReal(S.y, S.m, d, eid, Object.assign({}, prev, { sect: sectMarker }));
+        setReal(S.y, S.m, d, eid, Object.assign({}, prev,
+          { sect: chk.checked ? 'plonge' : null }));
         render();
       };
-      nameTd.appendChild(tog);
+      lbl.appendChild(chk);
+      lbl.appendChild(document.createTextNode(' Plonge'));
+      nameTd.appendChild(lbl);
     }
     tr.appendChild(nameTd);
   }
@@ -14234,6 +14288,46 @@ function mSaisie(box, asView) {
 
   // ── SECTION SALLE — CA + couverts + heures ──────────────────────────────
   const b3 = saisieBlock('🍽 Salle — CA, couverts & heures');
+
+  // ── Partage des couverts pour la prime ────────────────────────────────
+  // Actif par défaut le dimanche, mais activable n'importe quel jour
+  // (service exceptionnel, jour férié chargé…).
+  (function () {
+    const estDim = dow(S.y, S.m, d) === 0;
+    const actif = (dd.partageCouv !== undefined && dd.partageCouv !== null)
+      ? !!dd.partageCouv : estDim;
+    const wrap = document.createElement('label');
+    wrap.className = 'partage-couv' + (actif ? ' is-on' : '');
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.id = 'partage-couv';
+    chk.checked = actif;
+    chk.onchange = () => {
+      wrap.classList.toggle('is-on', chk.checked);
+      const dj = getDaily(S.y, S.m, d) || emptyDaily();
+      // On n'enregistre la valeur que si elle diffère du comportement
+      // automatique, pour ne pas figer inutilement les jours normaux.
+      if (chk.checked === estDim) delete dj.partageCouv;
+      else dj.partageCouv = chk.checked;
+      setDaily(S.y, S.m, d, dj);
+      scheduleAutosave();
+      const h = document.getElementById('partage-couv-hint');
+      if (h) h.textContent = chk.checked
+        ? 'Les couverts du jour seront répartis entre les personnes en salle présentes.'
+        : 'Chaque serveur garde les couverts qu\u2019il a saisis.';
+    };
+    const txt = document.createElement('span');
+    txt.innerHTML = '<b>Partager les couverts entre les serveurs</b>' +
+      "<span class='partage-couv-hint' id='partage-couv-hint'>" +
+      (actif
+        ? 'Les couverts du jour seront répartis entre les personnes en salle présentes.'
+        : 'Chaque serveur garde les couverts qu\u2019il a saisis.') +
+      '</span>';
+    wrap.appendChild(chk);
+    wrap.appendChild(txt);
+    b3.appendChild(wrap);
+  })();
+
   const tbl3 = document.createElement('table');
   tbl3.className = 'saisie-table';
   tbl3.innerHTML =
