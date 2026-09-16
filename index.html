@@ -2385,7 +2385,7 @@ table.grid {
    ═══════════════════════════════════════════════════════════════════════════ */
 .ai-fab {
   position: fixed;
-  bottom: 90px;
+  bottom: 24px;
   right: 24px;
   width: 54px;
   height: 54px;
@@ -2406,34 +2406,24 @@ table.grid {
   box-shadow: 0 8px 28px rgba(124, 58, 237, .55);
 }
 
-/* FAB Saisie du jour — vert identitaire, en bas à droite (IA empilée au-dessus) */
-.saisie-fab {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #3A9D52, #1f7a3a);
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 6px 24px rgba(31, 122, 58, .45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  z-index: 200;
-  transition: all var(--t);
-}
-.saisie-fab:hover {
-  transform: scale(1.1);
-  box-shadow: 0 8px 28px rgba(31, 122, 58, .55);
-}
+/* Dans la saisie et les rapports, une barre d'action occupe le bas de
+   l'écran : les boutons flottants y masqueraient le contenu et les boutons.
+   On les retire dans ces vues (ils restent disponibles ailleurs). */
+body[data-view="saisie"] .ai-fab { display: none; }
+body[data-view="rapport"] .ai-fab { bottom: 24px; }
+/* Marge basse pour que les boutons flottants ne recouvrent jamais la fin
+   du contenu dans les vues qui les affichent. */
+body[data-view="month"] .app-main,
+body[data-view="week"] .app-main,
+body[data-view="caisse"] .app-main,
+body[data-view="heures"] .app-main,
+body[data-view="emps"] .app-main,
+body[data-view="params"] .app-main { padding-bottom: 96px; }
+
 /* Sur mobile la sidebar passe en bas → on remonte les deux FAB au-dessus,
    empilés à droite (saisie au-dessus de l'IA). */
 @media (max-width: 720px) {
-  .saisie-fab { bottom: 84px; right: 16px; }
-  .ai-fab { bottom: 150px; right: 16px; }
+  .ai-fab { bottom: 84px; right: 16px; }
 }
 .ai-panel {
   position: fixed;
@@ -7308,6 +7298,9 @@ function render() {
   const app = document.getElementById('app');
   if (!app) return;
   if (document.title !== 'Ekip') document.title = 'Ekip';
+  // Vue courante exposée au CSS (sert à masquer les boutons flottants
+  // là où ils gêneraient la barre d'action ou le contenu).
+  document.body.dataset.view = S.view || 'month';
   app.innerHTML = '';
 
   // Layout général : sidebar latérale + zone de contenu
@@ -13617,6 +13610,12 @@ function mSaisie(box, asView) {
     ctx.d = nd;
     if (asView) S.saisieDay = nd;
     render();
+    // Nouveau jour : on repart du haut du formulaire
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    catch (e) { window.scrollTo(0, 0); }
+    const sc = document.querySelector('.saisie-page') ||
+      document.querySelector('.app-main');
+    if (sc && sc.scrollTop) sc.scrollTop = 0;
   };
 
   const prevBtn = mBtn('◀', false, () => {
@@ -16022,18 +16021,41 @@ function executeActions(actions) {
     )[0];
   }
 
+  // Garde-fous : le modèle peut halluciner un code poste ou un numéro de
+  // jour. On refuse tout ce qui n'existe pas plutôt que de créer des
+  // données fantômes dans le planning.
+  const jourValide = (d) => {
+    const n = parseInt(d, 10);
+    return !isNaN(n) && n >= 1 && n <= dim(S.y, S.m);
+  };
+  const posteValide = (p) => AP.some(x => x.c === p);
+
   actions.forEach(a => {
+    if (!a || typeof a !== 'object' || !a.action) return;  // entrée invalide
     if (a.action === 'assign') {
       const e = findEmpByNameOrId(a.employee, a.employee_id);
-      if (e && a.day && a.post) {
-        setSlot(a.day, a.post, e.id);
-        done.push('✓ ' + e.n + ' → ' + a.post + ' j.' + a.day);
+      if (!e) return;
+      if (!jourValide(a.day)) {
+        done.push('⚠ Jour invalide (' + a.day + ') — action ignorée');
+        return;
       }
+      if (!posteValide(a.post)) {
+        done.push('⚠ Poste inconnu (' + a.post + ') — action ignorée');
+        return;
+      }
+      setSlot(parseInt(a.day, 10), a.post, e.id);
+      done.push('✓ ' + e.n + ' → ' + a.post + ' j.' + a.day);
     } else if (a.action === 'remove') {
-      if (a.day && a.post) {
-        setSlot(a.day, a.post, null);
-        done.push('✓ Retiré ' + a.post + ' j.' + a.day);
+      if (!jourValide(a.day)) {
+        done.push('⚠ Jour invalide (' + a.day + ') — action ignorée');
+        return;
       }
+      if (!posteValide(a.post)) {
+        done.push('⚠ Poste inconnu (' + a.post + ') — action ignorée');
+        return;
+      }
+      setSlot(parseInt(a.day, 10), a.post, null);
+      done.push('✓ Retiré ' + a.post + ' j.' + a.day);
     } else if (a.action === 'autogen') {
       autoGen(a.mode || 'fill');
       done.push('✓ Planning généré (' + (a.mode || 'fill') + ')');
@@ -16046,6 +16068,13 @@ function executeActions(actions) {
         let days = [];
         if (a.days && Array.isArray(a.days)) days = a.days;
         else if (a.day) days = [a.day];
+        // On ne garde que des jours réellement présents dans le mois
+        const avant = days.length;
+        days = days.map(d => parseInt(d, 10)).filter(jourValide);
+        if (avant && days.length < avant) {
+          done.push('⚠ ' + (avant - days.length) +
+            ' jour(s) hors du mois ignoré(s)');
+        }
 
         if (days.length) {
           // Mutuelle exclusivité : retirer ces jours des autres types
@@ -16303,20 +16332,6 @@ function renderAiWidget() {
   fab.title = 'Assistant IA';
   fab.onclick = toggleAiPanel;
   document.body.appendChild(fab);
-
-  // Bouton flottant (FAB) Saisie du jour — en bas à gauche
-  const sFab = document.createElement('button');
-  sFab.id = 'saisie-fab';
-  sFab.className = 'saisie-fab';
-  sFab.textContent = '📋';
-  sFab.title = 'Saisie du jour';
-  sFab.onclick = () => {
-    const now = new Date();
-    const dd = (now.getFullYear() === S.y && now.getMonth() === S.m)
-      ? now.getDate() : 1;
-    openSaisie(dd);
-  };
-  document.body.appendChild(sFab);
 
   // Panneau IA (caché par défaut)
   const panel = document.createElement('div');
