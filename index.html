@@ -1051,27 +1051,31 @@ table.grid {
 }
 .saisie-photo-btn { margin-left: auto; }
 
-.saisie-form { display: flex; flex-direction: column; gap: 16px; }
+.saisie-form { display: flex; flex-direction: column; gap: 12px; }
 
 .saisie-block {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 14px;
+  padding: 12px 14px;
   background: var(--surface);
 }
 .saisie-block-title {
   font-size: 13px;
   font-weight: 700;
   color: var(--text);
-  margin-bottom: 12px;
+  margin-bottom: 9px;
 }
+
 
 .saisie-grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px 16px;
 }
-.saisie-field { display: flex; flex-direction: column; gap: 4px; }
+.saisie-field { display: flex; flex-direction: column; gap: 3px; }
+/* Dans la saisie, les champs n'ont pas besoin de marge basse : la grille
+   gère déjà l'espacement. */
+.saisie-field .form-input--sm { margin-bottom: 0; }
 .saisie-field-lbl {
   font-size: 11px;
   color: var(--text-2);
@@ -1099,6 +1103,8 @@ table.grid {
   margin-bottom: 0 !important;
   width: 100%;
   box-sizing: border-box;
+  padding-top: 6px;
+  padding-bottom: 6px;
 }
 .saisie-name {
   font-size: 12px;
@@ -1179,15 +1185,6 @@ table.grid {
 }
 .saisie-time-inp::placeholder { color: #c7c7c7; }
 
-/* Raccourcis horaires fréquents */
-.saisie-quick { display: flex; gap: 3px; margin-top: 3px; flex-wrap: wrap; }
-.saisie-quick-btn {
-  font-size: 10px; padding: 1px 6px; border-radius: 6px;
-  border: 1px solid var(--border, #e5e7eb); background: #f8fafc;
-  color: var(--text-2, #6b7280); cursor: pointer; font-family: inherit;
-  white-space: nowrap;
-}
-.saisie-quick-btn:hover { background: var(--accent, #1B5E3F); color: #fff; border-color: transparent; }
 /* Bouton « idem » recopier ligne du dessus */
 .saisie-copy-cell { vertical-align: middle; }
 .saisie-copy-above {
@@ -1361,23 +1358,33 @@ table.grid {
 .cell--search-dim { opacity: .3; }
 
 /* Contrôle de caisse */
-.cash-ctrl { display: flex; flex-direction: column; gap: 2px; }
+.cash-ctrl { display: flex; flex-direction: column; }
+/* Barre unique : verdict + montant + chevron de dépliage */
+.cash-ctrl-bar {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 12px 14px; border: none; border-radius: var(--radius);
+  font-family: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer; text-align: left;
+  background: var(--surface-2); color: var(--text-2);
+  transition: filter .12s;
+}
+.cash-ctrl-bar:hover { filter: brightness(.97); }
+.cash-ctrl-verdict { flex: 1; }
+.cash-ctrl-amount { font-size: 18px; white-space: nowrap; }
+.cash-ctrl-chevron { font-size: 11px; opacity: .55; }
+.cash-ctrl-bar.cc-ok { background: var(--success-soft); color: var(--success); }
+.cash-ctrl-bar.cc-warn { background: var(--warn-soft); color: #8a6d1f; }
+.cash-ctrl-bar.cc-bad { background: var(--danger-soft); color: var(--danger); }
+/* Détail du calcul, masqué par défaut */
+.cash-ctrl-detail { display: none; padding: 4px 4px 0; }
+.cash-ctrl-detail.is-open { display: block; }
 .cash-ctrl-line {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 9px 4px; font-size: 13px; color: var(--text-2);
+  padding: 8px 4px; font-size: 13px; color: var(--text-2);
   border-bottom: 0.5px solid var(--border);
 }
+.cash-ctrl-line:last-child { border-bottom: none; }
 .cash-ctrl-line b { color: var(--text); font-size: 14px; }
-.cash-ctrl-res {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 12px 14px; margin-top: 10px; border-radius: var(--radius);
-  font-size: 14px; font-weight: 600;
-}
-.cash-ctrl-res b { font-size: 18px; }
-.cash-ctrl-res.cc-ok { background: var(--success-soft); color: var(--success); }
-.cash-ctrl-res.cc-warn { background: var(--warn-soft); color: #8a6d1f; }
-.cash-ctrl-res.cc-bad { background: var(--danger-soft); color: var(--danger); }
-.cash-ctrl-note { font-size: 12px; color: var(--text-3); margin-top: 6px; padding: 0 4px; }
 
 /* Annotations Crédit / Bons cadeaux dans la saisie */
 .enc-annot-row td { padding: 0 0 8px !important; border: none !important; }
@@ -1553,6 +1560,19 @@ table.grid {
 .av-add { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .av-add select { min-width: 90px; }
 .av-h-input { max-width: 90px; }
+
+/* Bouton « + Autres modes de paiement » */
+.enc-more-btn {
+  display: block; width: 100%; margin-top: 8px;
+  padding: 8px 12px; border: 1px dashed var(--border-strong, #cbd5e1);
+  background: transparent; border-radius: 9px; cursor: pointer;
+  font-family: inherit; font-size: 12.5px; color: var(--text-2, #6b7280);
+  transition: background .12s, border-color .12s;
+}
+.enc-more-btn:hover {
+  background: var(--surface-2); border-style: solid;
+  color: var(--accent, #1B5E3F);
+}
 
 /* Bandeau de complétude du coût main-d'œuvre */
 .cost-banner {
@@ -2550,6 +2570,24 @@ table.grid {
   font-family: inherit;
   resize: vertical;
   margin-bottom: 12px;
+}
+.form-grid-1 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+/* Champs numériques : pas de flèches (saisie au clavier uniquement).
+   Évite de modifier un montant par inadvertance en scrollant la page. */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 .form-grid-2 {
   display: grid;
@@ -9586,6 +9624,13 @@ function mEditEmp(box) {
     i.value = value || '';
     i.placeholder = placeholder || '';
     i.className = 'form-input';
+    if (i.type === 'number') {
+      // Saisie au clavier uniquement (pas de molette ni de flèches)
+      i.addEventListener('wheel', () => { i.blur(); }, { passive: true });
+      i.addEventListener('keydown', (ev) => {
+        if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') ev.preventDefault();
+      });
+    }
     return i;
   }
   // Helper : enveloppe un input avec son label
@@ -9673,11 +9718,6 @@ function mEditEmp(box) {
   hoursDiv.appendChild(hoursInput);
   hoursDiv.appendChild(daysSpan);
 
-  const cpInput = makeInput(baseEmp.cpTotal || 25, '', 'number');
-  cpInput.min = '0';
-  cpInput.max = '50';
-  cpInput.classList.add('form-cp-input');
-
   const prioInput = makeInput(
     baseEmp.prio !== undefined ? baseEmp.prio : 50, '', 'number'
   );
@@ -9729,9 +9769,8 @@ function mEditEmp(box) {
   // Les extras sont payés à l'heure réellement travaillée : pas d'heures
   // de contrat mensuel à renseigner pour eux.
   const isExtraType = (type === 'extra');
-  cpRow.className = isExtraType ? 'form-grid-2' : 'form-grid-3';
+  cpRow.className = isExtraType ? 'form-grid-1' : 'form-grid-2';
   if (!isExtraType) cpRow.appendChild(field('Heures / mois', hoursDiv));
-  cpRow.appendChild(field('CP annuels (j)', cpInput));
   cpRow.appendChild(field('Priorité (1→99)', prioWrap));
   form.appendChild(cpRow);
 
@@ -10173,7 +10212,6 @@ function mEditEmp(box) {
     const newSec  = sec;
     const newType = type;
     const newCol  = eCol;
-    const newCp   = parseInt(cpInput.value) || 25;
     const newPrio = Math.max(1, Math.min(99, parseInt(prioInput.value) || 50));
     const newTaux = tauxInput.value !== '' ? (parseFloat(tauxInput.value) || 0) : null;
     const newSalaire = salInput.value !== '' ? (parseFloat(salInput.value) || 0) : null;
@@ -10210,7 +10248,7 @@ function mEditEmp(box) {
         jt: newJt, jours: newJours, r: newR, rs: newRs,
         ec: newEc ? 1 : 0, col: newCol, fixed: newFixed,
         tel: telInput.value, email: emailInput.value,
-        cpTotal: newCp, prio: newPrio, taux: newTaux,
+        cpTotal: baseEmp.cpTotal || 25, prio: newPrio, taux: newTaux,
         salaire: newSalaire, tauxHS: newTauxHS, primeCouv: newPrimeCouv,
         inactif: statutChk.checked ? 1 : 0,
         contrats: (S.modal._contrats !== undefined)
@@ -10232,7 +10270,6 @@ function mEditEmp(box) {
         emp.fixed   = newFixed;
         emp.tel     = telInput.value;
         emp.email   = emailInput.value;
-        emp.cpTotal = newCp;
         emp.prio    = newPrio;
         emp.taux    = newTaux;
         emp.salaire = newSalaire;
@@ -11049,7 +11086,7 @@ function mConfig(box, asView) {
       "<div class='cfg-count-label'>" + label + '</div>';
     return tile;
   }
-  const cTile = makeCountTile(ac.length,            'Cuisine', 'cuisine');
+  const cTile = makeCountTile(ac.length,            'Cuisine');
   const sTile = makeCountTile(as_.length,           'Salle',   'salle');
   const tTile = makeCountTile(ac.length + as_.length,'Total',   'total');
   cTile.id = 'cCnt';
@@ -11113,7 +11150,7 @@ function mConfig(box, asView) {
     buildPostSection(PC, ac, '🍳 Cuisine', '#c2410c', 'cuisine')
   );
   box.appendChild(
-    buildPostSection(PS, as_, '🍽 Salle', '#1d4ed8', 'salle')
+    buildPostSection(PS, as_, '🍽 Salle', '#1d4ed8')
   );
 
   // ── Bouton "Copier vers tous les jours" ────────────────────────────────
@@ -12876,7 +12913,6 @@ function saisieCtx() {
 /* Ouvre la saisie du jour en VUE pleine page (plus de pop-up). */
 function openSaisie(d) {
   const now = new Date();
-  S._freqTimes = null; // recalcul des horaires fréquents à chaque ouverture
   const def = (now.getFullYear() === S.y && now.getMonth() === S.m)
     ? now.getDate() : 1;
   // Mémorise l'écran d'origine pour y revenir (planning, caisse…).
@@ -12925,50 +12961,7 @@ function rSaisie() {
 
 /* Retourne les horaires (arr et dep) les plus fréquents dans l'historique,
    pour proposer des raccourcis. Fallback sur des valeurs typiques. */
-function frequentTimes() {
-  const arrCount = {}, depCount = {};
-  Object.keys(S.real || {}).forEach(mk => {
-    const days = S.real[mk];
-    Object.keys(days).forEach(day => {
-      Object.keys(days[day]).forEach(eid => {
-        const r = days[day][eid];
-        if (r && r.arr != null) arrCount[r.arr] = (arrCount[r.arr] || 0) + 1;
-        if (r && r.dep != null) depCount[r.dep] = (depCount[r.dep] || 0) + 1;
-      });
-    });
-  });
-  const top = (obj, fallback) => {
-    const arr = Object.keys(obj).map(k => [parseInt(k, 10), obj[k]])
-      .sort((a, b) => b[1] - a[1]).slice(0, 3).map(x => x[0]);
-    return arr.length ? arr : fallback;
-  };
-  return {
-    arr: top(arrCount, [8 * 60 + 45, 9 * 60, 11 * 60]),
-    dep: top(depCount, [14 * 60 + 30, 15 * 60, 23 * 60])
-  };
-}
 
-/* Boutons de raccourcis d'horaires fréquents sous un champ heure. */
-function buildQuickTimes(inputEl, col) {
-  const wrap = document.createElement('div');
-  wrap.className = 'saisie-quick';
-  const freq = S._freqTimes || (S._freqTimes = frequentTimes());
-  (col === 'arr' ? freq.arr : freq.dep).forEach(min => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'saisie-quick-btn';
-    b.textContent = fmtTimeInput(min);
-    b.tabIndex = -1;
-    b.onclick = () => {
-      inputEl.value = fmtTimeInput(min);
-      inputEl.dataset.min = min;
-      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-      inputEl.dispatchEvent(new Event('blur', { bubbles: true }));
-    };
-    wrap.appendChild(b);
-  });
-  return wrap;
-}
 
 /* Navigation verticale ↑/↓ entre champs heures de même colonne. */
 function moveVertical(el, dir) {
@@ -13041,15 +13034,17 @@ function mSaisie(box, asView) {
 
   const dd = getDaily(S.y, S.m, d) || emptyDaily();
 
-  // Liste des présents : planning du jour, augmentée/réduite manuellement.
-  // Stockée dans dd.presentIds dès qu'on la modifie ; sinon dérivée du planning.
+  // Liste des présents : toujours alimentée par le planning du jour, puis
+  // complétée par les ajouts manuels. Les salariés que l'on a explicitement
+  // retirés (dd.retires) ne sont jamais réinjectés.
   const planningIds = planningPresentIds(d);
-  let presentIds;
-  if (Array.isArray(dd.presentIds)) {
-    presentIds = dd.presentIds.slice();
-  } else {
-    presentIds = planningIds.slice();
-  }
+  const retires = Array.isArray(dd.retires) ? dd.retires : [];
+  const presentIds = Array.isArray(dd.presentIds) ? dd.presentIds.slice() : [];
+  planningIds.forEach(id => {
+    if (presentIds.indexOf(id) < 0 && retires.indexOf(id) < 0) {
+      presentIds.push(id);
+    }
+  });
   // On garde une référence pour saveSaisieForm via le DOM (data-attr)
   saisieCtx()._presentIds = presentIds;
 
@@ -13137,7 +13132,7 @@ function mSaisie(box, asView) {
   grid1.appendChild(saisieField('fdcVeille', 'Fonds caisse veille (€)', dd.fdcVeille));
   grid1.appendChild(saisieField('fdcJour', 'Fonds caisse jour (€)', dd.fdcJour));
   b1.appendChild(grid1);
-  form.appendChild(b1);
+  // (le bloc CA & couverts est ajouté après la Salle — ordre de la feuille)
 
   // Recalcule le CA total + couverts depuis les lignes serveur
   function recalcTotaux() {
@@ -13207,14 +13202,11 @@ function mSaisie(box, asView) {
     const arrSel = timeSelect('hr_arr_' + eid, r && r.arr != null ? r.arr : null);
     arrSel.dataset.col = 'arr';
     arrTd.appendChild(arrSel);
-    // Boutons horaires fréquents sous le champ arrivée
-    arrTd.appendChild(buildQuickTimes(arrSel, 'arr'));
 
     const depTd = document.createElement('td');
     const depSel = timeSelect('hr_dep_' + eid, r && r.dep != null ? r.dep : null);
     depSel.dataset.col = 'dep';
     depTd.appendChild(depSel);
-    depTd.appendChild(buildQuickTimes(depSel, 'dep'));
 
     const totTd = document.createElement('td');
     totTd.className = 'saisie-total';
@@ -13324,7 +13316,8 @@ function mSaisie(box, asView) {
   tbl2.appendChild(tb2);
   b2.appendChild(tbl2);
   b2.appendChild(makeAddPresentRow(d, 'cuisine'));
-  form.appendChild(b2);
+  // (le bloc Cuisine est ajouté au formulaire après la Salle — ordre réel
+  //  de saisie : on remplit d'abord la salle, puis la cuisine)
 
   // ── SECTION SALLE — CA + couverts + heures ──────────────────────────────
   const b3 = saisieBlock('🍽 Salle — CA, couverts & heures');
@@ -13368,6 +13361,17 @@ function mSaisie(box, asView) {
   b3.appendChild(tbl3);
   b3.appendChild(makeAddPresentRow(d, 'salle'));
   form.appendChild(b3);
+  // Le contenu du bloc « CA & couverts du jour » (totaux, alertes et fonds
+  // de caisse) est intégré au bas du bloc Salle : un cadre en moins.
+  (function () {
+    const kids = Array.prototype.slice.call(b1.children);
+    kids.forEach(child => {
+      // On saute le titre du bloc, devenu inutile
+      if (child.classList && child.classList.contains('saisie-block-title')) return;
+      b3.appendChild(child);
+    });
+  })();
+  form.appendChild(b2);
 
   // Calcule les totaux dès l'ouverture
   setTimeout(recalcTotaux, 30);
@@ -13382,24 +13386,36 @@ function mSaisie(box, asView) {
     '<th>Réel (caisse)</th></tr></thead>';
   const encBody = document.createElement('tbody');
 
+  // Modes courants affichés d'emblée ; les autres sont repliés sous
+  // « + Autres modes » (mais réapparaissent d'office s'ils ont une valeur).
   const encRows = [
     { key: 'cb',       label: 'CB' },
     { key: 'amex',     label: 'AMEX' },
-    { key: 'esp',      label: 'Espèces' },
-    { key: 'chq',      label: 'Chèques' },
     { key: 'ancv',     label: 'ANCV / Ch. vacances' },
-    { key: 'vrmnt',    label: 'Virement' },
-    { key: 'vad',      label: 'VAD' },
-    { key: 'cbanque',  label: 'Chèque banque' },
-    { key: 'cpt',      label: 'Client en compte' },
-    { key: 'encaisser', label: 'À encaisser' },
+    { key: 'esp',      label: 'Espèces' },
     { key: 'bons',     label: 'Bons cadeaux', annot: true },
-    { key: 'credit',   label: 'Crédit', annot: true },
-    { key: 'acompte',  label: 'Acompte' },
-    { key: 'depenses', label: 'Dépenses' }
+    { key: 'depenses', label: 'Dépenses' },
+    { key: 'chq',      label: 'Chèques', rare: true },
+    { key: 'vrmnt',    label: 'Virement', rare: true },
+    { key: 'vad',      label: 'VAD', rare: true },
+    { key: 'cbanque',  label: 'Chèque banque', rare: true },
+    { key: 'cpt',      label: 'Client en compte', rare: true },
+    { key: 'credit',   label: 'Crédit', annot: true, rare: true },
+    { key: 'acompte',  label: 'Acompte', rare: true }
   ];
 
+  // Un mode rare devient visible s'il contient déjà une valeur ce jour-là,
+  // ou si l'utilisateur a déplié la section.
+  const aUneValeur = (k) =>
+    ((dd.clyo || {})[k] != null && (dd.clyo || {})[k] !== '') ||
+    ((dd.reel || {})[k] != null && (dd.reel || {})[k] !== '');
+  const rareVisible = encRows.some(r => r.rare && aUneValeur(r.key));
+  if (S.showRareModes === undefined) S.showRareModes = false;
+  const montrerRares = S.showRareModes || rareVisible;
+
   encRows.forEach(row => {
+    // Mode rare et section repliée → on ne l'affiche pas
+    if (row.rare && !montrerRares) return;
     const tr = document.createElement('tr');
     const lblTd = document.createElement('td');
     lblTd.className = 'saisie-name';
@@ -13465,6 +13481,26 @@ function mSaisie(box, asView) {
   encTbl.appendChild(tfoot);
   b4.appendChild(encTbl);
 
+  // Bouton « + Autres modes » : déplie les modes de paiement rarement
+  // utilisés. Masqué si l'un d'eux contient déjà une valeur (ils sont
+  // alors affichés d'office).
+  if (!rareVisible) {
+    const nbRares = encRows.filter(r => r.rare).length;
+    const moreBtn = document.createElement('button');
+    moreBtn.type = 'button';
+    moreBtn.className = 'enc-more-btn';
+    moreBtn.textContent = S.showRareModes
+      ? '− Masquer les autres modes'
+      : '+ Autres modes de paiement (' + nbRares + ')';
+    moreBtn.onclick = () => {
+      const bx = document.querySelector('.saisie-form');
+      if (bx) saveSaisieForm(bx, d);
+      S.showRareModes = !S.showRareModes;
+      render();
+    };
+    b4.appendChild(moreBtn);
+  }
+
   function recalcEnc() {
     let tc = 0, tr = 0;
     encRows.forEach(row => {
@@ -13503,18 +13539,37 @@ function mSaisie(box, asView) {
   const bCtrl = saisieBlock('🔎 Contrôle de caisse');
   const ctrlBox = document.createElement('div');
   ctrlBox.className = 'cash-ctrl';
+  // Ligne unique : verdict + montant. Le détail du calcul se déplie au clic.
   ctrlBox.innerHTML =
-    "<div class='cash-ctrl-line'><span>CA réel (caisse)</span>" +
-      "<b id='cc-reel'>—</b></div>" +
-    "<div class='cash-ctrl-line'><span>CA déclaré (serveurs)</span>" +
-      "<b id='cc-decl'>—</b></div>" +
-    "<div class='cash-ctrl-line'><span>Variation fonds de caisse " +
-      "(jour − veille)</span><b id='cc-fdc'>—</b></div>" +
-    "<div class='cash-ctrl-res' id='cc-res-wrap'>" +
-      "<span>Différence</span><b id='cc-res'>—</b></div>" +
-    "<div class='cash-ctrl-note' id='cc-note'></div>";
+    "<button type='button' class='cash-ctrl-bar' id='cc-res-wrap'>" +
+      "<span class='cash-ctrl-verdict' id='cc-note'>—</span>" +
+      "<b class='cash-ctrl-amount' id='cc-res'>—</b>" +
+      "<span class='cash-ctrl-chevron' id='cc-chev'>▾</span>" +
+    '</button>' +
+    "<div class='cash-ctrl-detail' id='cc-detail'>" +
+      "<div class='cash-ctrl-line'><span>CA réel (caisse)</span>" +
+        "<b id='cc-reel'>—</b></div>" +
+      "<div class='cash-ctrl-line'><span>CA déclaré (serveurs)</span>" +
+        "<b id='cc-decl'>—</b></div>" +
+      "<div class='cash-ctrl-line'><span>Variation fonds de caisse " +
+        "(jour − veille)</span><b id='cc-fdc'>—</b></div>" +
+    '</div>';
   bCtrl.appendChild(ctrlBox);
-  form.appendChild(bCtrl);
+
+  // Dépliage du détail
+  setTimeout(() => {
+    const bar = document.getElementById('cc-res-wrap');
+    const det = document.getElementById('cc-detail');
+    const chev = document.getElementById('cc-chev');
+    if (bar && det) {
+      if (S.ccOpen) { det.classList.add('is-open'); if (chev) chev.textContent = '▴'; }
+      bar.onclick = () => {
+        S.ccOpen = !S.ccOpen;
+        det.classList.toggle('is-open', S.ccOpen);
+        if (chev) chev.textContent = S.ccOpen ? '▴' : '▾';
+      };
+    }
+  }, 40);
 
   function recalcControle() {
     // CA réel = total colonne Réel
@@ -13554,8 +13609,8 @@ function mSaisie(box, asView) {
     if (note) {
       const a = Math.abs(diff);
       note.textContent = a < 0.01 ? '✓ Caisse juste'
-        : diff > 0 ? 'Excédent en caisse de ' + eur2(a)
-        : 'Manque en caisse de ' + eur2(a);
+        : diff > 0 ? 'Excédent en caisse'
+        : 'Manque en caisse';
     }
   }
   // Brancher le recalcul sur tous les champs concernés
@@ -13585,12 +13640,15 @@ function mSaisie(box, asView) {
   obs.placeholder = 'Ex : Carole balaie 10€, incident, remarque…';
   obs.value = dd.obs || '';
   b5.appendChild(obs);
+  // Observations avant le contrôle de caisse (qui clôt la saisie)
   form.appendChild(b5);
+  form.appendChild(bCtrl);
 
   box.appendChild(form);
 
   // Navigation au clavier : Entrée → champ suivant
   setTimeout(() => { enableEnterNavigation(form); }, 60);
+
 
   const foot = document.createElement('div');
   foot.className = 'modal-foot modal-foot--between';
@@ -13613,10 +13671,18 @@ function mSaisie(box, asView) {
       closeModal();
     }
   });
-  const saveBtn = mBtn('✓ Enregistrer', true, () => {
+  const saveBtn = mBtn('✓ Enregistrer et jour suivant', true, () => {
     saveSaisieForm(box, d);
-    toast('Saisie du ' + d + ' ' + MN[S.m] + ' enregistrée', 'ok');
-    render();
+    const last = dim(S.y, S.m);
+    if (d < last) {
+      toast('Saisie du ' + d + ' ' + MN[S.m] + ' enregistrée', 'ok');
+      gotoDay(d + 1);
+    } else {
+      // Dernier jour du mois : on enchaîne sur le 1er du mois suivant
+      toast('Saisie du ' + d + ' ' + MN[S.m] + ' enregistrée', 'ok');
+      S.m++; if (S.m > 11) { S.m = 0; S.y++; }
+      gotoDay(1);
+    }
   });
   rightWrap.appendChild(closeBtn);
   rightWrap.appendChild(saveBtn);
@@ -13626,7 +13692,6 @@ function mSaisie(box, asView) {
   box.appendChild(foot);
 }
 
-/* Construit un bloc de section pour la saisie. */
 function saisieBlock(title) {
   const block = document.createElement('div');
   block.className = 'saisie-block';
@@ -13644,13 +13709,17 @@ function makeRemovePresentBtn(eid, d) {
   btn.innerHTML = '✕';
   btn.title = 'Retirer ce salarié de la journée';
   btn.onclick = () => {
-    const box = document.querySelector('.mo');
+    const box = document.querySelector('.saisie-form') ||
+      document.querySelector('.mo') || document.querySelector('.caisse-wrap');
     if (box) saveSaisieForm(box, d);
     const idx = saisieCtx()._presentIds.indexOf(eid);
     if (idx >= 0) saisieCtx()._presentIds.splice(idx, 1);
-    // Persiste la liste modifiée
+    // Persiste la liste modifiée + mémorise le retrait explicite, pour que
+    // le salarié ne soit pas réinjecté depuis le planning au prochain rendu.
     const dd = getDaily(S.y, S.m, d) || emptyDaily();
     dd.presentIds = saisieCtx()._presentIds.slice();
+    if (!Array.isArray(dd.retires)) dd.retires = [];
+    if (dd.retires.indexOf(eid) < 0) dd.retires.push(eid);
     setDaily(S.y, S.m, d, dd);
     render();
   };
@@ -13668,7 +13737,10 @@ function makeAddPresentRow(d, section) {
 
   const input = document.createElement('input');
   input.type = 'text';
-  input.className = 'form-input--sm';
+  // Dernier maillon de la navigation Entrée de sa section : après le
+  // dernier champ d'un salarié, Entrée amène ici pour en ajouter un autre.
+  input.className = 'form-input--sm saisie-enter saisie-add-input';
+  input.dataset.section = section;
   input.placeholder = '+ Rechercher un salarié…';
   input.style.width = '100%';
   input.autocomplete = 'off';
@@ -13698,27 +13770,41 @@ function makeAddPresentRow(d, section) {
       document.querySelector('.mo') || document.querySelector('.caisse-wrap');
     if (box) saveSaisieForm(box, d);
     if (saisieCtx()._presentIds.indexOf(eid) < 0) saisieCtx()._presentIds.push(eid);
+    // Si le salarié avait été retiré manuellement, on lève ce retrait
+    const ddA = getDaily(S.y, S.m, d);
+    if (ddA && Array.isArray(ddA.retires) && ddA.retires.indexOf(eid) >= 0) {
+      ddA.retires = ddA.retires.filter(x => x !== eid);
+      setDaily(S.y, S.m, d, ddA);
+    }
     const dd = getDaily(S.y, S.m, d) || emptyDaily();
     dd.presentIds = saisieCtx()._presentIds.slice();
     setDaily(S.y, S.m, d, dd);
-    // Polyvalent ajouté dans une section ≠ sa section habituelle : marquer
-    // sa section travaillée du jour (via le champ sect des heures réelles).
+    // Section travaillée du jour : on l'aligne TOUJOURS sur la section dans
+    // laquelle on ajoute le salarié. Sans ça, un polyvalent déjà marqué dans
+    // l'autre section y restait coincé (ex. Carine marquée cuisine puis
+    // réajoutée en salle restait en cuisine).
     const e = findEmp(eid);
-    if (e && (section === 'cuisine' || section === 'salle') &&
-        section !== e.s && e.ec) {
+    if (e && (section === 'cuisine' || section === 'salle')) {
       const prev = getReal(S.y, S.m, d, eid) || {
         arr: null, dep: null, total: null, note: '' };
-      setReal(S.y, S.m, d, eid, Object.assign({}, prev, { sect: section }));
+      // sect = null quand c'est sa section habituelle (pas de marqueur inutile)
+      const newSect = (section === e.s) ? null : (e.ec ? section : null);
+      setReal(S.y, S.m, d, eid, Object.assign({}, prev, { sect: newSect }));
     }
     render();
-    // Fluidité : place le curseur directement sur le champ « arrivée »
-    // du salarié qu'on vient d'ajouter, prêt à taper l'heure.
+    // Fluidité : place le curseur sur le premier champ qu'on remplit
+    // réellement — le CA pour un serveur en salle, l'arrivée en cuisine.
     setTimeout(() => {
-      const arrField = document.getElementById('hr_arr_' + eid);
-      if (arrField) {
-        arrField.focus();
-        try { arrField.select(); } catch (err) { /* select */ }
-        arrField.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      const first = (section === 'salle')
+        ? (document.getElementById('sv_ca_' + eid) ||
+           document.getElementById('hr_arr_' + eid))
+        : document.getElementById('hr_arr_' + eid);
+      if (first) {
+        first.focus();
+        try { first.select(); } catch (err) { /* select */ }
+        if (typeof first.scrollIntoView === 'function') {
+          first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
       }
     }, 80);
   }
@@ -13760,11 +13846,17 @@ function makeAddPresentRow(d, section) {
   input.onfocus = refresh;
   input.onkeydown = (ev) => {
     if (ev.key === 'Enter') {
-      ev.preventDefault();
       const q = input.value.trim().toLowerCase();
       const matches = candidates().filter(e =>
         e.n.toLowerCase().indexOf(q) >= 0);
-      if (matches.length) addEmp(matches[0].id);
+      if (q && matches.length) {
+        // Un salarié correspond : on l'ajoute et on bloque la navigation
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        addEmp(matches[0].id);
+      }
+      // Champ vide ou sans correspondance : on laisse Entrée poursuivre
+      // la navigation vers le bloc suivant.
     } else if (ev.key === 'Escape') {
       list.style.display = 'none';
     }
@@ -13796,6 +13888,12 @@ function numInput(id, value, cls) {
   inp.id = id;
   inp.value = (value !== null && value !== undefined) ? value : '';
   inp.placeholder = '0';
+  // Saisie au clavier uniquement : la molette et les flèches ↑↓ ne doivent
+  // jamais modifier un montant (on scrollait la page et le chiffre changeait).
+  inp.addEventListener('wheel', (ev) => { inp.blur(); }, { passive: true });
+  inp.addEventListener('keydown', (ev) => {
+    if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') ev.preventDefault();
+  });
   return inp;
 }
 
@@ -13844,7 +13942,17 @@ function saveSaisieForm(box, d) {
   const dd = getDaily(S.y, S.m, d) || emptyDaily();
   const getNum = (id) => {
     const el = document.getElementById(id);
-    if (!el || el.value === '') return null;
+    if (!el) {
+      // Champ non affiché (mode de paiement replié) : on conserve la valeur
+      // déjà enregistrée plutôt que de l'effacer.
+      const m = id.match(/^(clyo|reel)_(.+)$/);
+      if (m) {
+        const src = (m[1] === 'clyo' ? dd.clyo : dd.reel) || {};
+        return src[m[2]] !== undefined ? src[m[2]] : null;
+      }
+      return null;
+    }
+    if (el.value === '') return null;
     const v = parseFloat(el.value);
     return isNaN(v) ? null : v;
   };
@@ -13872,11 +13980,16 @@ function saveSaisieForm(box, d) {
     dd.presentIds = saisieCtx()._presentIds.slice();
   }
 
+  // « À encaisser » n'est plus saisi : on conserve les valeurs historiques
+  // déjà enregistrées plutôt que de les écraser.
+  const prevClyo = dd.clyo || {};
+  const prevReel = dd.reel || {};
   dd.clyo = {
     esp: getNum('clyo_esp'), cb: getNum('clyo_cb'), amex: getNum('clyo_amex'),
     chq: getNum('clyo_chq'), ancv: getNum('clyo_ancv'), vrmnt: getNum('clyo_vrmnt'),
     vad: getNum('clyo_vad'), cbanque: getNum('clyo_cbanque'), cpt: getNum('clyo_cpt'),
-    encaisser: getNum('clyo_encaisser'), bons: getNum('clyo_bons'),
+    encaisser: (prevClyo.encaisser !== undefined ? prevClyo.encaisser : null),
+    bons: getNum('clyo_bons'),
     credit: getNum('clyo_credit'), acompte: getNum('clyo_acompte'),
     depenses: getNum('clyo_depenses')
   };
@@ -13884,7 +13997,8 @@ function saveSaisieForm(box, d) {
     esp: getNum('reel_esp'), cb: getNum('reel_cb'), amex: getNum('reel_amex'),
     chq: getNum('reel_chq'), ancv: getNum('reel_ancv'), vrmnt: getNum('reel_vrmnt'),
     vad: getNum('reel_vad'), cbanque: getNum('reel_cbanque'), cpt: getNum('reel_cpt'),
-    encaisser: getNum('reel_encaisser'), bons: getNum('reel_bons'),
+    encaisser: (prevReel.encaisser !== undefined ? prevReel.encaisser : null),
+    bons: getNum('reel_bons'),
     credit: getNum('reel_credit'), acompte: getNum('reel_acompte'),
     depenses: getNum('reel_depenses')
   };
