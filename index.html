@@ -14078,6 +14078,7 @@ function mSaisie(box, asView) {
       const el = document.getElementById('dep-total');
       if (el) el.textContent = t ? t.toLocaleString('fr-FR',
         { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €' : '—';
+      if (typeof recalcEnc === 'function') recalcEnc();
       if (typeof recalcControle === 'function') recalcControle();
       scheduleAutosave();
     };
@@ -14199,6 +14200,14 @@ function mSaisie(box, asView) {
       const vr = parseFloat((document.getElementById('reel_' + row.key) || {}).value);
       if (!isNaN(vr)) tr += vr;
     });
+    // Dépenses (bloc séparé) : comptées côté Réel comme avant
+    const ctxD = saisieCtx();
+    if (ctxD && Array.isArray(ctxD._depenses)) {
+      ctxD._depenses.forEach(it => {
+        const v = parseFloat(it.montant);
+        if (!isNaN(v)) tr += v;
+      });
+    }
     const tcEl = document.getElementById('enc-tot-clyo');
     const trEl = document.getElementById('enc-tot-reel');
     const ecEl = document.getElementById('enc-ecart');
@@ -14268,6 +14277,15 @@ function mSaisie(box, asView) {
       const v = parseFloat((document.getElementById('reel_' + row.key) || {}).value);
       if (!isNaN(v)) { caReel += v; hasReel = true; }
     });
+    // Les dépenses ont leur propre bloc (hors tableau) : on les ajoute ici,
+    // comme n'importe quel autre mode de la colonne Réel.
+    const ctxDp = saisieCtx();
+    if (ctxDp && Array.isArray(ctxDp._depenses)) {
+      ctxDp._depenses.forEach(it => {
+        const v = parseFloat(it.montant);
+        if (!isNaN(v) && v !== 0) { caReel += v; hasReel = true; }
+      });
+    }
     // CA déclaré = somme des CA serveurs
     let caDecl = 0, hasDecl = false;
     const ctxC = saisieCtx();
