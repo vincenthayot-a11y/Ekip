@@ -1642,6 +1642,19 @@ table.grid {
 .depot-fact-btn:hover { border-color: var(--border-strong); }
 .depot-fact-btn.is-on { background: var(--success-soft); color: var(--success); }
 
+/* Aide sélection rapide des absences */
+.abs-aide {
+  font-size: 12px; color: var(--text-2); margin: 10px 2px 0;
+  padding: 8px 12px; background: var(--surface-2); border-radius: 8px;
+  line-height: 1.5;
+}
+
+/* Indication du report automatique du fonds de caisse */
+.fdc-auto-hint {
+  display: block; font-size: 10px; color: var(--accent, #1B5E3F);
+  margin-top: 2px; font-style: italic;
+}
+
 /* Case « Plonge » dans la saisie : exclut du partage des couverts */
 .plonge-chk {
   display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;
@@ -5583,13 +5596,73 @@ function contratHNow(emp) {
   return contratH(emp, S.y, S.m);
 }
 
+/* Contrat du mois affiché, congés payés déduits — c'est cette valeur qui
+   sert de référence pour les écarts d'heures et les heures sup. */
+function contratDuNow(emp) {
+  return contratAjuste(emp, S.y, S.m);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   CONTRAT AJUSTÉ AUX CONGÉS PAYÉS
+   ───────────────────────────────────────────────────────────────────────────
+   Un salarié en congés ne peut pas faire ses heures contractuelles : on
+   réduit son contrat du mois au prorata des jours de congé posés sur des
+   jours où il aurait pu travailler.
+   Les arrêts maladie ne réduisent PAS le contrat (choix métier) : ils
+   apparaissent donc comme un déficit d'heures.
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* Jours de congés payés d'un salarié sur un mois donné. */
+function cpDuMois(year, month, empId) {
+  const k = year + '-' + String(month + 1).padStart(2, '0');
+  return ((S.cp[k] || {})[empId] || []);
+}
+
+/* Contrat du mois, réduit au prorata des congés payés.
+   Retourne { base, ajuste, joursOuvrables, joursCp }. */
+function contratAjusteDetail(emp, year, month) {
+  const base = contratH(emp, year, month);
+  if (!emp || emp.t === 'extra' || !base) {
+    return { base: base, ajuste: base, joursOuvrables: 0, joursCp: 0 };
+  }
+  const D = dim(year, month);
+  const kClos = year + '-' + String(month + 1).padStart(2, '0');
+  const fermes = S.closed[kClos] || [];
+  const cp = cpDuMois(year, month, emp.id);
+
+  let ouvrables = 0, joursCp = 0;
+  for (let d = 1; d <= D; d++) {
+    if (fermes.indexOf(d) >= 0) continue;        // restaurant fermé
+    if (!canWork(emp, year, month, d)) continue; // jour non travaillable
+    ouvrables++;
+    if (cp.indexOf(d) >= 0) joursCp++;
+  }
+  if (!ouvrables || !joursCp) {
+    return { base: base, ajuste: base, joursOuvrables: ouvrables, joursCp: joursCp };
+  }
+  const ajuste = base * (ouvrables - joursCp) / ouvrables;
+  return {
+    base: base,
+    ajuste: Math.round(ajuste * 100) / 100,
+    joursOuvrables: ouvrables,
+    joursCp: joursCp
+  };
+}
+
+/* Contrat du mois effectivement dû, congés déduits. */
+function contratAjuste(emp, year, month) {
+  return contratAjusteDetail(emp, year, month).ajuste;
+}
+
 function empHeuresSup(year, month, empId) {
   const e = findEmp(empId);
   if (!e || e.t === 'extra') {
     return { hs: 0, montant: 0, payableMensuel: false };
   }
   const real = empRealHoursMonth(year, month, empId);
-  const contrat = contratH(e, year, month);
+  // Contrat réduit des congés payés : un salarié en CP n'a pas à faire
+  // ses heures sur les jours où il était absent.
+  const contrat = contratAjuste(e, year, month);
   const hs = Math.max(0, real - contrat);
   const taux = (e.tauxHS != null && e.tauxHS !== '') ? e.tauxHS : 0;
   // Au-delà du seuil : HS reportées en fin d'année → non payées mensuellement
@@ -6919,7 +6992,7 @@ function exportRecap() {
   S.emps.forEach(e => {
     const wj = workedDays(e.id);
     const hw = workedHours(e.id);
-    const diff = Math.round((hw - contratHNow(e)) * 10) / 10;
+    const diff = Math.round((hw - contratDuNow(e)) * 10) / 10;
     const cpd = getCp(e.id).length;
     const mald = getMal(e.id).length;
     rows.push([
@@ -7804,7 +7877,7 @@ function rHdr() {
         const h = empRealHoursMonth(S.y, S.m, S.searchEmp);
         const badge = document.createElement('span');
         badge.className = 'emp-search-hours';
-        const contrat = contratHNow(e);
+        const contrat = contratDuNow(e);
         const over = contrat && h > contrat;
         badge.innerHTML = '<b>' + (Math.round(h * 10) / 10) + 'h</b>' +
           (contrat ? ' / ' + contrat + 'h' : '');
@@ -8249,7 +8322,7 @@ function rHeures() {
     // Total réel / contrat
     const tdTot = document.createElement('td');
     tdTot.className = 'abs-td-total';
-    const target = contratHNow(e);
+    const target = contratDuNow(e);
     const diff = Math.round((totReel - target) * 10) / 10;
     const diffColor = diff > 0 ? '#e11d48' : (diff < 0 ? '#f59e0b' : '#16a34a');
     const reelR = Math.round(totReel * 10) / 10;
@@ -9179,8 +9252,8 @@ function rRecap() {
   let overContract = 0, underContract = 0, withAlerts = 0;
   S.emps.forEach(e => {
     const h = workedHours(e.id);
-    if (h > contratHNow(e) * 1.05) overContract++;
-    else if (h < contratHNow(e) * 0.7 && workedDays(e.id) > 0) underContract++;
+    if (h > contratDuNow(e) * 1.05) overContract++;
+    else if (h < contratDuNow(e) * 0.7 && workedDays(e.id) > 0) underContract++;
     if (legalAlerts(e.id).length) withAlerts++;
   });
 
@@ -9225,7 +9298,7 @@ function rRecap() {
   S.emps.forEach((e, i) => {
     const daysWorked = workedDays(e.id);
     const hoursWorked = workedHours(e.id);
-    const cH = contratHNow(e);
+    const cH = contratDuNow(e);
     const pct = cH ? Math.min(100, Math.round(hoursWorked / cH * 100)) : 0;
     const diff = Math.round((hoursWorked - cH) * 10) / 10;
     const cpDays  = getCp (e.id).filter(d => d >= 1 && d <= D).length;
@@ -9629,7 +9702,7 @@ function mAssign(box) {
 
       // Jauge d'heures : permet de voir qui est sous/au-dessus de son contrat
       const hW = workedHours(e.id);
-      const cH2 = contratHNow(e);
+      const cH2 = contratDuNow(e);
       const pctH = cH2 ? Math.min(100, Math.round(hW / cH2 * 100)) : 0;
       const gaugeColor = pctH >= 100 ? '#16a34a' : pctH >= 70 ? '#3b82f6' : '#f59e0b';
 
@@ -10748,6 +10821,47 @@ function mIndispos(box) {
   box.appendChild(typeRow);
 
   // ── Comptes de jours absents par colonne (pour le pied de tableau) ─────
+  /* Pose ou retire une absence sur un jour. Retourne le mode appliqué
+     ('add' ou 'remove') pour que le glissement reste cohérent. */
+  function poserJour(eid, day, forceMode) {
+    const k = mk();
+    const arr3 = curType.arr(k, eid);
+    const ix = arr3.indexOf(day);
+    const mode = forceMode || (ix >= 0 ? 'remove' : 'add');
+    if (mode === 'remove') {
+      if (ix >= 0) arr3.splice(ix, 1);
+    } else if (ix < 0) {
+      // Exclusivité : ce jour sort des autres types d'absence
+      if (!S.ind[k]) S.ind[k] = {};
+      if (!S.cp[k])  S.cp[k]  = {};
+      if (!S.mal[k]) S.mal[k] = {};
+      if (!S.pm[k])  S.pm[k]  = {};
+      ['ind', 'cp', 'mal', 'pm'].forEach(t => {
+        if (t === absType) return;
+        const tgt = (t === 'ind' ? S.ind : t === 'cp' ? S.cp
+          : t === 'mal' ? S.mal : S.pm);
+        if (tgt[k][eid]) {
+          const i = tgt[k][eid].indexOf(day);
+          if (i >= 0) tgt[k][eid].splice(i, 1);
+        }
+      });
+      arr3.push(day);
+    }
+    return mode;
+  }
+
+  /* Applique le même mode sur toute une plage de jours. */
+  function appliquerPlage(eid, from, to, mode) {
+    const a = Math.min(from, to), b = Math.max(from, to);
+    for (let j = a; j <= b; j++) poserJour(eid, j, mode);
+  }
+
+  // Fin du glissement : on relâche partout, même hors du tableau
+  if (!S._absDragBound) {
+    S._absDragBound = true;
+    document.addEventListener('mouseup', () => { S._absDrag = null; });
+  }
+
   const dayCounts = {};
   days.forEach(d => {
     dayCounts[d] = 0;
@@ -10904,28 +11018,33 @@ function mIndispos(box) {
       if (on) cell.textContent = '×';
 
       if (cw || on) {
-        cell.onclick = ((eid, day) => () => {
-          const k = mk();
-          const arr3 = curType.arr(k, eid);
-          const ix = arr3.indexOf(day);
-          if (ix >= 0) {
-            arr3.splice(ix, 1);
+        cell.dataset.eid = e.id;
+        cell.dataset.day = d;
+        // Clic simple : bascule ce jour.
+        // Maj + clic : applique du dernier jour cliqué jusqu'à celui-ci.
+        // Clic maintenu + glissement : applique sur toute la plage survolée.
+        cell.onclick = ((eid, day) => (ev) => {
+          if (ev.shiftKey && S._absLast && S._absLast.eid === eid) {
+            appliquerPlage(eid, S._absLast.day, day, S._absLast.mode);
           } else {
-            // Mutuelle exclusivité : retirer ce jour de tous les autres types
-            if (!S.ind[k]) S.ind[k] = {};
-            if (!S.cp[k])  S.cp[k]  = {};
-            if (!S.mal[k]) S.mal[k] = {};
-            if (!S.pm[k])  S.pm[k]  = {};
-            ['ind','cp','mal','pm'].forEach(t => {
-              if (t === absType) return;
-              const tgt = (t === 'ind' ? S.ind : t === 'cp' ? S.cp : t === 'mal' ? S.mal : S.pm);
-              if (tgt[k][eid]) {
-                const i = tgt[k][eid].indexOf(day);
-                if (i >= 0) tgt[k][eid].splice(i, 1);
-              }
-            });
-            arr3.push(day);
+            const mode = poserJour(eid, day);
+            S._absLast = { eid: eid, day: day, mode: mode };
           }
+          save();
+          innerRerender();
+        })(e.id, d);
+        cell.onmousedown = ((eid, day) => (ev) => {
+          if (ev.shiftKey) return;           // géré par le clic
+          ev.preventDefault();
+          const mode = poserJour(eid, day);
+          S._absLast = { eid: eid, day: day, mode: mode };
+          S._absDrag = { eid: eid, from: day, mode: mode };
+          save();
+          innerRerender();
+        })(e.id, d);
+        cell.onmouseenter = ((eid, day) => () => {
+          if (!S._absDrag || S._absDrag.eid !== eid) return;
+          appliquerPlage(eid, S._absDrag.from, day, S._absDrag.mode);
           save();
           innerRerender();
         })(e.id, d);
@@ -10971,8 +11090,16 @@ function mIndispos(box) {
   tbody.appendChild(tfoot);
 
   table.appendChild(tbody);
+  table.style.userSelect = 'none';   // pas de sélection de texte au glissement
   tblWrap.appendChild(table);
   box.appendChild(tblWrap);
+
+  const aide = document.createElement('p');
+  aide.className = 'abs-aide';
+  aide.innerHTML = '💡 <b>Sélection rapide :</b> maintiens le clic et glisse ' +
+    'sur plusieurs jours, ou clique un jour puis <b>Maj + clic</b> sur un ' +
+    'autre pour appliquer toute la plage.';
+  box.appendChild(aide);
 
   // Footer : "Tout effacer" + Fermer
   const foot = document.createElement('div');
@@ -13031,7 +13158,8 @@ function mFicheSalarie(box) {
       box.appendChild(head);
 
       const hReal = empRealHoursMonth(S.y, S.m, e.id);
-      const contrat = contratH(e, S.y, S.m);
+      const detC = contratAjusteDetail(e, S.y, S.m);
+      const contrat = detC.ajuste;
       const ecart = contrat ? hReal - contrat : null;
       const jours = joursTravailles(e.id);
 
@@ -13042,7 +13170,9 @@ function mFicheSalarie(box) {
         "<div class='fiche-stat-val'>" + val + '</div>' +
         "<div class='fiche-stat-lbl'>" + lbl + '</div></div>';
       let html = card('Heures réelles', h1(hReal)) +
-        (contrat ? card('Contrat', h1(contrat)) : '') +
+        (contrat ? card(detC.joursCp ? 'Contrat (CP déduits)' : 'Contrat',
+          h1(contrat)) : '') +
+        (detC.joursCp ? card('Congés', detC.joursCp + ' j') : '') +
         (ecart != null ? card('Écart', (ecart >= 0 ? '+' : '') + h1(ecart),
           ecart > 0 ? 'fiche-stat--over' : ecart < 0 ? 'fiche-stat--under' : '') : '') +
         card('Jours travaillés', jours);
@@ -13518,7 +13648,7 @@ function exportParEmploye() {
 
     const wj = workedDays(e.id);
     const hw = workedHours(e.id);
-    const diff = Math.round((hw - contratHNow(e)) * 10) / 10;
+    const diff = Math.round((hw - contratDuNow(e)) * 10) / 10;
     const cpCount  = getCp (e.id).filter(d => d >= 1 && d <= D).length;
     const malCount = getMal(e.id).filter(d => d >= 1 && d <= D).length;
     const col = ECOLS.filter(c => c.id === e.col)[0] ||
@@ -14104,7 +14234,35 @@ function mSaisie(box, asView) {
 
   const grid1 = document.createElement('div');
   grid1.className = 'saisie-grid-2';
-  grid1.appendChild(saisieField('fdcVeille', 'Fonds caisse veille (€)', dd.fdcVeille));
+  // Fonds de caisse de la veille : repris automatiquement du fonds « jour »
+  // de la journée précédente (on remonte jusqu'à 7 jours pour sauter les
+  // jours de fermeture). Reste modifiable à la main.
+  let fdcVeilleAuto = dd.fdcVeille;
+  let sourceVeille = null;
+  if (fdcVeilleAuto == null || fdcVeilleAuto === '') {
+    let y2 = S.y, m2 = S.m, j2 = d;
+    for (let k = 0; k < 7 && fdcVeilleAuto == null; k++) {
+      j2--;
+      if (j2 < 1) {                       // on recule d'un mois
+        m2--; if (m2 < 0) { m2 = 11; y2--; }
+        j2 = dim(y2, m2);
+      }
+      const dv = getDaily(y2, m2, j2);
+      if (dv && dv.fdcJour != null && dv.fdcJour !== '') {
+        fdcVeilleAuto = dv.fdcJour;
+        sourceVeille = j2 + '/' + String(m2 + 1).padStart(2, '0');
+      }
+    }
+  }
+  const champVeille = saisieField('fdcVeille', 'Fonds caisse veille (€)',
+    fdcVeilleAuto);
+  if (sourceVeille) {
+    const hint = document.createElement('span');
+    hint.className = 'fdc-auto-hint';
+    hint.textContent = 'repris du ' + sourceVeille;
+    champVeille.appendChild(hint);
+  }
+  grid1.appendChild(champVeille);
   grid1.appendChild(saisieField('fdcJour', 'Fonds caisse jour (€)', dd.fdcJour));
   b1.appendChild(grid1);
   // (le bloc CA & couverts est ajouté après la Salle — ordre de la feuille)
@@ -15306,7 +15464,7 @@ function mSaisieSynth(box) {
   sortedEmps.forEach(e => {
     const mins = empHours[e.id] || 0;
     const hReal = mins / 60;
-    const diff = hReal - contratHNow(e);
+    const diff = hReal - contratDuNow(e);
     const col = eColor(e.id);
     const diffColor = diff >= 0 ? 'var(--success)' : 'var(--danger)';
     rows1 +=
@@ -15527,7 +15685,7 @@ function buildSynthText(y, m) {
     .sort((a, b) => (empHours[b.id] || 0) - (empHours[a.id] || 0))
     .forEach(e => {
       const hReal = (empHours[e.id] || 0) / 60;
-      const diff = hReal - contratHNow(e);
+      const diff = hReal - contratDuNow(e);
       txt += e.n.padEnd(16) + ' : ' + hReal.toFixed(1) + 'h ' +
         '(contrat ' + e.h + 'h, ' + (diff >= 0 ? '+' : '') +
         diff.toFixed(1) + 'h)\n';
