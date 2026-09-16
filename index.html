@@ -5632,10 +5632,13 @@ function contratAjusteDetail(emp, year, month) {
 
   let ouvrables = 0, joursCp = 0;
   for (let d = 1; d <= D; d++) {
+    const enCp = cp.indexOf(d) >= 0;
+    // Un congé posé compte toujours, même sur un jour de fermeture :
+    // c'est le cas d'une fermeture annuelle où les CP sont imposés.
+    if (enCp) { ouvrables++; joursCp++; continue; }
     if (fermes.indexOf(d) >= 0) continue;        // restaurant fermé
     if (!canWork(emp, year, month, d)) continue; // jour non travaillable
     ouvrables++;
-    if (cp.indexOf(d) >= 0) joursCp++;
   }
   if (!ouvrables || !joursCp) {
     return { base: base, ajuste: base, joursOuvrables: ouvrables, joursCp: joursCp };
@@ -8411,7 +8414,9 @@ function rRapports() {
       { icon: '📊', title: 'Statistiques postes', rap: 'stats',
         desc: 'Répartition des affectations par employé et par poste.' },
       { icon: '💰', title: 'Coût main-d\u2019œuvre vs CA', rap: 'rapLabor',
-        desc: 'Ratio masse salariale / chiffre d\u2019affaires, jour par jour.' }
+        desc: 'Ratio masse salariale / chiffre d\u2019affaires, jour par jour.' },
+      { icon: '🧮', title: 'Récap paie', rap: 'paie',
+        desc: 'Ce que tu dois à chaque salarié : heures, HS, prime, total.' }
     ]}
   ];
 
@@ -8469,7 +8474,8 @@ function rRapportDetail() {
     ficheSalarie: '👤 Fiche par salarié',
     encMois: '💳 Encaissements du mois',
     caAnnuel: '📆 CA annuel',
-    depensesMois: '💸 Dépenses du mois'
+    depensesMois: '💸 Dépenses du mois',
+    paie: '🧮 Récap paie'
   };
   const rap = S.rapType || 'dashboard';
 
@@ -8512,6 +8518,7 @@ function rRapportDetail() {
     else if (rap === 'encMois')      mEncMois(content);
     else if (rap === 'caAnnuel')     mCaAnnuel(content);
     else if (rap === 'depensesMois') mDepensesMois(content);
+    else if (rap === 'paie')         mPaie(content);
   } finally {
     S._rapView = false;
   }
@@ -8604,10 +8611,14 @@ function rCaisse() {
   pointBtn.onclick = () => { S.modal = { type: 'pointage_pick' }; render(); };
   barActions.appendChild(pointBtn);
 
+  // Le récap de paie a rejoint l'onglet Rapports (famille Personnel).
   const paieBtn = document.createElement('button');
   paieBtn.className = 'btn bg';
-  paieBtn.innerHTML = '💰 Récap paie';
-  paieBtn.onclick = () => { S.modal = { type: 'paie' }; render(); };
+  paieBtn.innerHTML = '🧮 Récap paie →';
+  paieBtn.title = 'Ouvrir le récap de paie dans les rapports';
+  paieBtn.onclick = () => {
+    S.rapType = 'paie'; S.view = 'rapport'; S.modal = null; render();
+  };
   barActions.appendChild(paieBtn);
 
   // Saisie du jour déplacée vers l'onglet dédié « 📋 Saisie du jour » du menu
