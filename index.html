@@ -1446,7 +1446,7 @@ table.grid {
 
 /* Vue rapport pleine page */
 .caisse-back-btn { margin-right: 12px; }
-.rapport-content { padding: 4px 0; }
+.rapport-content { padding: 4px 18px 8px; }
 .rap-period {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin: 0 0 16px; padding: 10px 14px;
@@ -1569,10 +1569,215 @@ table.grid {
   font-family: inherit; font-size: 12.5px; color: var(--text-2, #6b7280);
   transition: background .12s, border-color .12s;
 }
+/* Dépôt en banque */
+.depot-block {
+  background: #f0f7f3; border: 1px solid #cfe3d6;
+  border-radius: 12px; padding: 14px 16px; margin-bottom: 16px;
+}
+.depot-head {
+  font-size: 13px; font-weight: 700; color: var(--accent);
+  margin-bottom: 10px;
+}
+.depot-line {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 0; font-size: 13px; color: var(--text-2);
+}
+.depot-line b { color: var(--text); font-variant-numeric: tabular-nums; }
+.depot-res {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 8px; padding: 11px 13px; border-radius: 9px;
+  background: var(--accent); color: #fff;
+  font-size: 14px; font-weight: 600;
+}
+.depot-res b { font-size: 20px; font-variant-numeric: tabular-nums; }
+.depot-warn {
+  margin-top: 10px; padding: 9px 12px; border-radius: 9px;
+  background: #fef3c7; color: #8a6d1f; font-size: 12px; line-height: 1.5;
+}
+.depot-det { margin-top: 10px; }
+.depot-det summary {
+  cursor: pointer; font-size: 12px; color: var(--text-2);
+  padding: 4px 0; user-select: none;
+}
+.depot-det summary:hover { color: var(--accent); }
+.depot-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.depot-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px; background: #fff; border-radius: 7px; font-size: 12px;
+}
+.depot-item-date { font-weight: 700; color: var(--text-2); white-space: nowrap; }
+.depot-item-mt { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.depot-item-note { flex: 1; color: var(--text-2); min-width: 0; }
+.depot-item.is-nofact { background: #fffbf0; }
+/* Bouton facture cliquable dans le détail du dépôt */
+.depot-fact-btn {
+  border: 1px solid transparent; cursor: pointer; flex-shrink: 0;
+  font-family: inherit; font-size: 11px; font-weight: 600;
+  padding: 3px 10px; border-radius: 20px; white-space: nowrap;
+  background: var(--surface-2); color: var(--text-3);
+  transition: all .12s;
+}
+.depot-fact-btn:hover { border-color: var(--border-strong); }
+.depot-fact-btn.is-on { background: var(--success-soft); color: var(--success); }
+
+/* Dépenses du jour — liste multi-lignes */
+.dep-block {
+  margin-top: 12px; padding: 11px 13px;
+  background: #fdfaf3; border: 1px solid #efe6d2; border-radius: 10px;
+}
+.dep-title {
+  font-size: 12px; font-weight: 700; color: #7a5b12; margin-bottom: 8px;
+}
+.dep-list { display: flex; flex-direction: column; gap: 6px; }
+.dep-empty { font-size: 12px; color: var(--text-3); font-style: italic; }
+.dep-row { display: flex; align-items: center; gap: 8px; }
+.dep-montant { max-width: 110px; flex-shrink: 0; margin-bottom: 0 !important; }
+.dep-note { flex: 1; min-width: 0; margin-bottom: 0 !important; }
+.dep-facture {
+  display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+  font-size: 12px; font-weight: 600; color: var(--text-3);
+  padding: 5px 10px; border-radius: 7px; white-space: nowrap;
+  border: 1px solid var(--border); background: #fff; transition: all .12s;
+}
+.dep-facture input { width: 15px; height: 15px; cursor: pointer; margin: 0; }
+.dep-facture.is-on {
+  color: var(--success); border-color: transparent;
+  background: var(--success-soft);
+}
+.dep-del {
+  border: none; background: transparent; cursor: pointer; flex-shrink: 0;
+  color: var(--text-3); font-size: 13px; padding: 4px 7px; border-radius: 6px;
+}
+.dep-del:hover { background: var(--danger-soft); color: var(--danger); }
+.dep-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-top: 9px;
+}
+.dep-total { font-size: 12px; color: var(--text-2); }
+.dep-total b { font-size: 14px; color: var(--text); margin-left: 4px; }
+/* Badge facture dans le suivi */
+.dep-badge {
+  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px;
+  white-space: nowrap;
+}
+.dep-badge.is-ok { background: var(--success-soft); color: var(--success); }
+.dep-badge.is-ko { background: var(--surface-2); color: var(--text-3); }
+.suivi-count--warn { background: var(--warn-soft) !important; color: #8a6d1f !important; }
+
 .enc-more-btn:hover {
   background: var(--surface-2); border-style: solid;
   color: var(--accent, #1B5E3F);
 }
+
+/* Titres de famille dans la page Rapports */
+.rap-famille-titre {
+  font-size: 14px; font-weight: 700; color: var(--text);
+  margin: 6px 4px 12px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Encaissements du mois — synthèse + tableau type tableur */
+.enc-synth {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px; margin-bottom: 16px;
+}
+.enc-synth-card {
+  background: var(--surface-2); border-radius: 12px; padding: 12px 14px;
+  border: 1px solid var(--border);
+}
+.enc-synth-val { font-size: 19px; font-weight: 700; color: var(--text); line-height: 1.2; }
+.enc-synth-lbl {
+  font-size: 10px; color: var(--text-3); margin-top: 3px;
+  text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+}
+.enc-synth-card.is-ok { background: var(--success-soft); border-color: transparent; }
+.enc-synth-card.is-ok .enc-synth-val { color: var(--success); }
+.enc-synth-card.is-warn { background: var(--warn-soft); border-color: transparent; }
+.enc-synth-card.is-warn .enc-synth-val { color: #8a6d1f; }
+.enc-synth-card.is-bad { background: var(--danger-soft); border-color: transparent; }
+.enc-synth-card.is-bad .enc-synth-val { color: var(--danger); }
+
+.enc-mois-scroll {
+  overflow: auto; max-height: calc(100vh - 300px);
+  border: 1px solid var(--border); border-radius: 12px;
+  background: #fff;
+}
+.enc-mois-table {
+  border-collapse: separate; border-spacing: 0;
+  font-size: 12.5px; width: 100%; min-width: max-content;
+  font-variant-numeric: tabular-nums; background: #fff;
+}
+/* La colonne Jour reste compacte, les colonnes de montants se répartissent
+   l'espace restant. */
+.enc-mois-table th:first-child,
+.enc-mois-table td:first-child { width: 78px; }
+/* En-têtes sur deux niveaux, figés */
+.enc-mois-table th {
+  position: sticky; z-index: 2; background: #fff;
+  padding: 7px 10px; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .03em; color: var(--text-2);
+  white-space: nowrap; text-align: right;
+}
+.enc-mois-table thead tr:first-child th { top: 0; }
+.enc-mois-table thead tr:last-child th {
+  top: 29px; border-bottom: 2px solid var(--border-strong);
+}
+.enc-grp {
+  text-align: center !important; font-size: 11px !important;
+  font-weight: 700 !important; letter-spacing: .02em !important;
+  padding: 8px 10px !important;
+}
+.enc-grp--clyo { background: #eaf1fa !important; color: #2b5f9e !important; }
+.enc-grp--reel { background: #e8f4ec !important; color: #1B5E3F !important; }
+.enc-grp--ec   { background: var(--surface-2) !important; color: var(--text-2) !important; }
+.enc-corner { background: #fff !important; }
+/* Colonne Jour figée à gauche */
+.enc-sticky {
+  position: sticky; left: 0; z-index: 3;
+  background: #fff !important; text-align: left !important;
+  border-right: 2px solid var(--border);
+}
+.enc-mois-table thead .enc-sticky { z-index: 4; }
+/* Séparateur entre les grands blocs */
+.enc-sep { border-left: 2px solid var(--border) !important; }
+
+.enc-mois-table td {
+  padding: 6px 10px; text-align: right; white-space: nowrap;
+  border-bottom: 0.5px solid #f0efe9;
+  border-right: 0.5px solid #eeece4;
+  color: var(--text);
+}
+.enc-mois-table th { border-right: 0.5px solid #e8e5db; }
+.enc-mois-table td:last-child,
+.enc-mois-table th:last-child { border-right: none; }
+.enc-jour { font-size: 12px; }
+.enc-jour b { font-weight: 700; margin-right: 5px; }
+.enc-jour span { color: var(--text-3); font-size: 10px; text-transform: uppercase; }
+.enc-tot-col { font-weight: 700; background: #fafaf8; }
+.enc-na { color: #d4d4d0; }
+/* Jours sans données : discrets et compacts */
+.enc-mois-row--vide td { padding-top: 3px; padding-bottom: 3px; color: #cfcfc8; }
+.enc-mois-row--vide .enc-jour b { font-weight: 500; color: #b8b8b0; }
+.enc-mois-row--dim .enc-sticky { background: #fbfbf7 !important; }
+.enc-mois-row { cursor: pointer; transition: background .1s; }
+.enc-mois-row:hover td { background: #f3f8f4; }
+.enc-mois-row:hover .enc-sticky { background: #f3f8f4 !important; }
+/* Pastille d'écart */
+.enc-pill {
+  display: inline-block; padding: 2px 8px; border-radius: 20px;
+  font-size: 11px; font-weight: 700;
+}
+.enc-pill.is-ok { background: var(--success-soft); color: var(--success); }
+.enc-pill.is-warn { background: var(--warn-soft); color: #8a6d1f; }
+.enc-pill.is-bad { background: var(--danger-soft); color: var(--danger); }
+/* Ligne de totaux figée en bas */
+.enc-mois-table tfoot td {
+  position: sticky; bottom: 0; z-index: 2;
+  background: var(--surface-2); font-weight: 700;
+  border-top: 2px solid var(--border-strong); padding: 9px 10px;
+}
+.enc-mois-table tfoot .enc-sticky { z-index: 3; background: var(--surface-2) !important; }
+.enc-mois-note { font-size: 12px; color: var(--text-3); margin: 10px 2px 0; }
 
 /* Bandeau de complétude du coût main-d'œuvre */
 .cost-banner {
@@ -1866,6 +2071,13 @@ table.grid {
 .mo--wide { max-width: 1000px; max-height: 88vh; }
 .mo--wide-absences { max-width: 960px; max-height: 88vh; }
 .mo--stats { max-width: 700px; }
+/* En page rapport (hors fenêtre modale), le contenu occupe toute la largeur */
+.rapport-content.mo--stats,
+.rapport-content.mo--wide {
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+}
 
 /* En-tête de modal : titre + bouton ✕ */
 .modal-hdr {
@@ -8026,51 +8238,66 @@ function rRapports() {
   bar.innerHTML = '<div class="caisse-bar-title">📊 Rapports</div>';
   outer.appendChild(bar);
 
-  const cards = [
-    { icon: '🎯', title: 'Tableau de bord', rap: 'dashboard',
-      desc: 'Les 5 indicateurs clés du mois en un coup d\u2019œil.' },
-    { icon: '💰', title: 'Coût main-d\u2019œuvre vs CA', rap: 'rapLabor',
-      desc: 'Ratio masse salariale / chiffre d\u2019affaires, jour par jour.' },
-    { icon: '📈', title: 'Synthèse CA mensuelle', rap: 'rapCA',
-      desc: 'CA, couverts, ticket moyen, comparaison N-1 et modes de paiement.' },
-    { icon: '📅', title: 'Vue annuelle', rap: 'annuel',
-      desc: "Suivi des heures sur l'année complète, employé par employé." },
-    { icon: '📊', title: 'Statistiques postes', rap: 'stats',
-      desc: 'Répartition des affectations par employé et par poste.' },
-    { icon: '🧾', title: 'Suivi crédits & notes', rap: 'suiviCredits',
-      desc: 'Crédits, bons cadeaux et observations — recherche par mot-clé.' },
-    { icon: '👤', title: 'Fiche par salarié', rap: 'ficheSalarie',
-      desc: 'Heures, écart contrat, CA et couverts — tableau global et détail.' }
+  // Rapports groupés par famille : ce qui touche au chiffre d'affaires
+  // d'un côté, ce qui touche aux ressources humaines de l'autre.
+  const familles = [
+    { titre: '💶 Chiffre d\u2019affaires & caisse', cards: [
+      { icon: '🎯', title: 'Tableau de bord', rap: 'dashboard',
+        desc: 'Les indicateurs clés du mois en un coup d\u2019œil.' },
+      { icon: '📈', title: 'Synthèse CA mensuelle', rap: 'rapCA',
+        desc: 'CA, couverts, ticket moyen et comparaison N-1.' },
+      { icon: '💳', title: 'Encaissements du mois', rap: 'encMois',
+        desc: 'Détail jour par jour de tous les modes de paiement.' },
+      { icon: '🧾', title: 'Suivi crédits & notes', rap: 'suiviCredits',
+        desc: 'Crédits, bons cadeaux, dépenses et observations — recherche par mot-clé.' }
+    ]},
+    { titre: '👥 Personnel & heures', cards: [
+      { icon: '👤', title: 'Fiche par salarié', rap: 'ficheSalarie',
+        desc: 'Heures, écart contrat, CA et couverts — global et détail.' },
+      { icon: '📅', title: 'Vue annuelle', rap: 'annuel',
+        desc: "Suivi des heures sur l'année complète, employé par employé." },
+      { icon: '📊', title: 'Statistiques postes', rap: 'stats',
+        desc: 'Répartition des affectations par employé et par poste.' },
+      { icon: '💰', title: 'Coût main-d\u2019œuvre vs CA', rap: 'rapLabor',
+        desc: 'Ratio masse salariale / chiffre d\u2019affaires, jour par jour.' }
+    ]}
   ];
 
-  const grid = document.createElement('div');
-  grid.style.display = 'grid';
-  grid.style.gridTemplateColumns = 'repeat(auto-fill,minmax(240px,1fr))';
-  grid.style.gap = '16px';
-  grid.style.padding = '4px';
+  familles.forEach(fam => {
+    const h = document.createElement('h3');
+    h.className = 'rap-famille-titre';
+    h.textContent = fam.titre;
+    outer.appendChild(h);
 
-  cards.forEach(c => {
-    const card = document.createElement('button');
-    card.className = 'btn bg';
-    card.style.cssText =
-      'display:flex;flex-direction:column;align-items:flex-start;gap:6px;' +
-      'text-align:left;padding:20px;border-radius:14px;height:auto;' +
-      'white-space:normal;line-height:1.4';
-    card.innerHTML =
-      "<span style='font-size:28px'>" + c.icon + '</span>' +
-      "<span style='font-size:16px;font-weight:600'>" + c.title + '</span>' +
-      "<span style='font-size:13px;color:var(--muted,#6b7280)'>" +
-      c.desc + '</span>';
-    card.onclick = () => {
-      S.rapType = c.rap;
-      S.view = 'rapport';
-      S.modal = null;
-      render();
-    };
-    grid.appendChild(card);
+    const grid = document.createElement('div');
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = 'repeat(auto-fill,minmax(240px,1fr))';
+    grid.style.gap = '16px';
+    grid.style.padding = '4px 4px 20px';
+
+    fam.cards.forEach(c => {
+      const card = document.createElement('button');
+      card.className = 'btn bg';
+      card.style.cssText =
+        'display:flex;flex-direction:column;align-items:flex-start;gap:6px;' +
+        'text-align:left;padding:20px;border-radius:14px;height:auto;' +
+        'white-space:normal;line-height:1.4';
+      card.innerHTML =
+        "<span style='font-size:28px'>" + c.icon + '</span>' +
+        "<span style='font-size:16px;font-weight:600'>" + c.title + '</span>' +
+        "<span style='font-size:13px;color:var(--muted,#6b7280)'>" +
+        c.desc + '</span>';
+      card.onclick = () => {
+        S.rapType = c.rap;
+        S.view = 'rapport';
+        S.modal = null;
+        render();
+      };
+      grid.appendChild(card);
+    });
+    outer.appendChild(grid);
   });
 
-  outer.appendChild(grid);
   return outer;
 }
 
@@ -8087,7 +8314,8 @@ function rRapportDetail() {
     annuel: '📅 Vue annuelle',
     stats: '📊 Statistiques postes',
     suiviCredits: '🧾 Suivi crédits & notes',
-    ficheSalarie: '👤 Fiche par salarié'
+    ficheSalarie: '👤 Fiche par salarié',
+    encMois: '💳 Encaissements du mois'
   };
   const rap = S.rapType || 'dashboard';
 
@@ -8124,6 +8352,7 @@ function rRapportDetail() {
     else if (rap === 'stats')        mStats(content);
     else if (rap === 'suiviCredits') mSuiviCredits(content);
     else if (rap === 'ficheSalarie') mFicheSalarie(content);
+    else if (rap === 'encMois')      mEncMois(content);
   } finally {
     S._rapView = false;
   }
@@ -11873,7 +12102,7 @@ function mSuiviCredits(box) {
   } else {
     months.push([S.y, S.m]);
   }
-  const creditRows = [], bonsRows = [], obsRows = [];
+  const creditRows = [], bonsRows = [], obsRows = [], depRows = [];
   months.forEach(([y, m]) => {
     const D = dim(y, m);
     for (let d = 1; d <= D; d++) {
@@ -11895,6 +12124,22 @@ function mSuiviCredits(box) {
           && matchQ(bonNote)) {
         bonsRows.push({ y, m, d, date: dateLbl, montant: bonMontant,
           note: bonNote, paid: !!(ne.bons && ne.bons.paid) });
+      }
+      // Dépenses : liste détaillée si disponible, sinon ancien format
+      if (Array.isArray(dd.depensesList)) {
+        dd.depensesList.forEach(it => {
+          if (matchQ(it.note) || matchQ(String(it.montant))) {
+            depRows.push({ y, m, d, date: dateLbl, montant: it.montant,
+              note: it.note, facture: !!it.facture });
+          }
+        });
+      } else {
+        const depMontant = (dd.reel && dd.reel.depenses) || 0;
+        const depNote = (ne.depenses && ne.depenses.note) || '';
+        if (depMontant && (matchQ(depNote) || matchQ(String(depMontant)))) {
+          depRows.push({ y, m, d, date: dateLbl, montant: depMontant,
+            note: depNote, facture: false });
+        }
       }
       if (dd.obs && dd.obs.trim() && matchQ(dd.obs)) {
         obsRows.push({ y, m, d, date: dateLbl, obs: dd.obs.trim() });
@@ -11977,6 +12222,48 @@ function mSuiviCredits(box) {
   box.appendChild(buildList('💳 Crédits', creditRows, 'Réglé'));
   box.appendChild(buildList('🎁 Bons cadeaux', bonsRows, 'Utilisé'));
 
+  // ── Dépenses : sorties de caisse, pas de statut à cocher ──────────────
+  (function () {
+    const sec = document.createElement('div');
+    sec.className = 'suivi-section';
+    const total = depRows.reduce((s2, r) => s2 + r.montant, 0);
+    const sansFact = depRows.filter(r => !r.facture).length;
+    sec.innerHTML = '<h4 class="suivi-h">💸 Dépenses ' +
+      '<span class="suivi-count">' +
+      (total ? 'total ' + eur2(total) : 'aucune') + '</span>' +
+      (sansFact ? '<span class="suivi-count suivi-count--warn">' + sansFact +
+        ' sans facture</span>' : '') + '</h4>';
+    if (!depRows.length) {
+      const e = document.createElement('p');
+      e.className = 'suivi-empty';
+      e.textContent = 'Aucune dépense sur la période.';
+      sec.appendChild(e);
+    } else {
+      depRows.forEach(r => {
+        const item = document.createElement('div');
+        item.className = 'suivi-item';
+        item.innerHTML =
+          "<div class='suivi-item-main'>" +
+          "<span class='suivi-date'>" + r.date + '</span>' +
+          "<span class='suivi-montant'>" + eur2(r.montant) + '</span>' +
+          (r.note
+            ? "<span class='suivi-note'>" + escapeHtml(r.note) + '</span>'
+            : "<span class='suivi-note suivi-note--empty'>(sans note)</span>") +
+          (r.facture
+            ? "<span class='dep-badge is-ok'>📎 Facture</span>"
+            : "<span class='dep-badge is-ko'>Sans facture</span>") +
+          '</div>';
+        item.style.cursor = 'pointer';
+        item.title = 'Ouvrir la saisie du jour';
+        item.onclick = ((yy, mm, dd2) => () => {
+          S.y = yy; S.m = mm; openSaisie(dd2);
+        })(r.y, r.m, r.d);
+        sec.appendChild(item);
+      });
+    }
+    box.appendChild(sec);
+  })();
+
   // Observations du jour
   const obsSec = document.createElement('div');
   obsSec.className = 'suivi-section';
@@ -12005,6 +12292,279 @@ function mSuiviCredits(box) {
 
 /* Fiche par salarié : tableau global (heures/contrat/écart + CA/couverts)
    avec clic pour le détail d'un salarié. */
+/* Encaissements du mois : détail jour par jour de tous les modes de
+   paiement. Les mêmes colonnes des deux côtés (Clyo / Réel) pour permettre
+   la comparaison ligne à ligne. */
+function mEncMois(box) {
+  box.classList.add('mo--stats');
+  const D = dim(S.y, S.m);
+  const eur = (n) => n
+    ? n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '';
+
+  const tousModes = [
+    { k: 'cb', l: 'CB' }, { k: 'amex', l: 'AMEX' },
+    { k: 'ancv', l: 'ANCV' }, { k: 'chq', l: 'Chèques' },
+    { k: 'esp', l: 'Espèces' }, { k: 'vrmnt', l: 'Virement' },
+    { k: 'vad', l: 'VAD' }, { k: 'cbanque', l: 'Ch. banque' },
+    { k: 'cpt', l: 'Clt compte' }, { k: 'bons', l: 'Bons cad.' },
+    { k: 'credit', l: 'Crédit' }, { k: 'acompte', l: 'Acompte' },
+    { k: 'depenses', l: 'Dépenses' }
+  ];
+  // Un mode est retenu s'il est utilisé d'un côté OU de l'autre : les deux
+  // blocs ont ainsi exactement les mêmes colonnes, alignées.
+  const modes = tousModes.filter(m => {
+    for (let d = 1; d <= D; d++) {
+      const dd = getDaily(S.y, S.m, d);
+      if (!dd) continue;
+      if ((dd.clyo && dd.clyo[m.k]) || (dd.reel && dd.reel[m.k])) return true;
+    }
+    return false;
+  });
+
+  if (!modes.length) {
+    const e = document.createElement('p');
+    e.className = 'suivi-empty';
+    e.textContent = 'Aucun encaissement saisi sur ' + MN[S.m] + ' ' + S.y + '.';
+    box.appendChild(e);
+    const f0 = document.createElement('div');
+    f0.className = 'modal-foot--end-only';
+    f0.appendChild(mBtn('Fermer', false, closeModal));
+    box.appendChild(f0);
+    return;
+  }
+
+  // ── Bandeau de synthèse du mois ───────────────────────────────────────
+  let sumC = 0, sumR = 0, sumEcart = 0, nbJours = 0;
+  for (let d = 1; d <= D; d++) {
+    const dd = getDaily(S.y, S.m, d);
+    if (!dd) continue;
+    let hasData = false;
+    modes.forEach(m => {
+      if (dd.clyo && dd.clyo[m.k]) { sumC += dd.clyo[m.k]; hasData = true; }
+      if (dd.reel && dd.reel[m.k]) { sumR += dd.reel[m.k]; hasData = true; }
+    });
+    if (hasData) nbJours++;
+    const ec = ecartCaisseJour(S.y, S.m, d);
+    if (ec !== null) sumEcart += ec;
+  }
+
+  const synth = document.createElement('div');
+  synth.className = 'enc-synth';
+  const card = (lbl, val, cls) =>
+    "<div class='enc-synth-card " + (cls || '') + "'>" +
+    "<div class='enc-synth-val'>" + val + '</div>' +
+    "<div class='enc-synth-lbl'>" + lbl + '</div></div>';
+  const ecCls = Math.abs(sumEcart) < 0.01 ? 'is-ok'
+    : Math.abs(sumEcart) < 20 ? 'is-warn' : 'is-bad';
+  synth.innerHTML =
+    card('Jours saisis', nbJours + '/' + D) +
+    card('Total Clyo', eur(sumC) + ' €') +
+    card('Total réel', eur(sumR) + ' €') +
+    card('Écart cumulé', (sumEcart > 0 ? '+' : '') + sumEcart.toFixed(2) + ' €', ecCls);
+  box.appendChild(synth);
+
+  // ── Dépôt en banque : espèces Clyo − dépenses réglées en espèces ──────
+  // Les dépenses sont toujours payées en liquide depuis la caisse : on les
+  // déduit du montant à déposer. Celles sans facture sont signalées à part.
+  (function () {
+    let espClyo = 0, depAvecFacture = 0, depSansFacture = 0;
+    const lignes = [];
+    for (let d = 1; d <= D; d++) {
+      const dd = getDaily(S.y, S.m, d);
+      if (!dd) continue;
+      if (dd.clyo && dd.clyo.esp) espClyo += dd.clyo.esp;
+      if (Array.isArray(dd.depensesList)) {
+        dd.depensesList.forEach((it, idx) => {
+          const mt = it.montant || 0;
+          if (!mt) return;
+          if (it.facture) depAvecFacture += mt; else depSansFacture += mt;
+          lignes.push({ d: d, idx: idx, montant: mt, note: it.note,
+            facture: !!it.facture });
+        });
+      } else if (dd.reel && dd.reel.depenses) {
+        depSansFacture += dd.reel.depenses;
+        lignes.push({ d: d, montant: dd.reel.depenses, note: '', facture: false });
+      }
+    }
+    const aDeposer = espClyo - depAvecFacture;
+
+    const bk = document.createElement('div');
+    bk.className = 'depot-block';
+
+    const ligne = (lbl, val, cls) =>
+      "<div class='depot-line " + (cls || '') + "'><span>" + lbl +
+      "</span><b>" + val + '</b></div>';
+
+    bk.innerHTML =
+      "<div class='depot-head'>🏦 Dépôt en banque — " + MN[S.m] + ' ' + S.y +
+      '</div>' +
+      ligne('Espèces encaissées (Clyo)', eur(espClyo) + ' €') +
+      ligne('− Dépenses avec facture', '− ' + eur(depAvecFacture) + ' €') +
+      "<div class='depot-res'><span>Montant à déposer</span><b>" +
+      eur(aDeposer) + ' €</b></div>' +
+      (depSansFacture
+        ? "<div class='depot-warn'>⚠️ " + eur(depSansFacture) +
+          ' € de dépenses sans facture ne sont pas déduites — ' +
+          'elles manqueront physiquement en caisse.</div>'
+        : '');
+
+    // Détail dépliable des dépenses
+    if (lignes.length) {
+      const det = document.createElement('details');
+      det.className = 'depot-det';
+      if (S.depotOuvert) det.open = true;
+      det.ontoggle = () => { S.depotOuvert = det.open; };
+      const sum = document.createElement('summary');
+      sum.textContent = 'Voir le détail des ' + lignes.length + ' dépense' +
+        (lignes.length > 1 ? 's' : '');
+      det.appendChild(sum);
+      const ul = document.createElement('div');
+      ul.className = 'depot-list';
+      lignes.forEach(l => {
+        const row = document.createElement('div');
+        row.className = 'depot-item' + (l.facture ? '' : ' is-nofact');
+        row.innerHTML =
+          "<span class='depot-item-date'>" + String(l.d).padStart(2, '0') +
+          '/' + String(S.m + 1).padStart(2, '0') + '</span>' +
+          "<span class='depot-item-mt'>" + eur(l.montant) + ' €</span>' +
+          "<span class='depot-item-note'>" +
+          (l.note ? escapeHtml(l.note) : '—') + '</span>';
+        // Case facture cochable directement depuis cette vue
+        const fb = document.createElement('button');
+        fb.type = 'button';
+        fb.className = 'depot-fact-btn' + (l.facture ? ' is-on' : '');
+        fb.innerHTML = l.facture ? '📎 Facture' : 'Sans facture';
+        fb.title = l.facture
+          ? 'Retirer la facture' : 'Marquer comme ayant une facture';
+        fb.onclick = ((jour, index) => (ev) => {
+          ev.preventDefault();
+          const dj = getDaily(S.y, S.m, jour);
+          if (!dj || !Array.isArray(dj.depensesList)) return;
+          const cible = dj.depensesList[index];
+          if (!cible) return;
+          cible.facture = !cible.facture;
+          setDaily(S.y, S.m, jour, dj);
+          save();
+          S.depotOuvert = true;   // garder le détail ouvert après le rendu
+          render();
+        })(l.d, l.idx);
+        row.appendChild(fb);
+        ul.appendChild(row);
+      });
+      det.appendChild(ul);
+      bk.appendChild(det);
+    }
+    box.appendChild(bk);
+  })();
+
+  // ── Tableau ───────────────────────────────────────────────────────────
+  const scroll = document.createElement('div');
+  scroll.className = 'enc-mois-scroll';
+  const tbl = document.createElement('table');
+  tbl.className = 'enc-mois-table';
+
+  let h1 = '<tr><th class="enc-sticky enc-corner"></th>' +
+    '<th colspan="' + (modes.length + 1) + '" class="enc-grp enc-grp--clyo">' +
+      'Clyo — théorique</th>' +
+    '<th colspan="' + (modes.length + 1) + '" class="enc-grp enc-grp--reel">' +
+      'Réel — caisse</th>' +
+    '<th class="enc-grp enc-grp--ec">Écart</th></tr>';
+
+  let h2 = '<tr><th class="enc-sticky">Jour</th>';
+  modes.forEach((m, i) => {
+    h2 += '<th' + (i === 0 ? ' class="enc-sep"' : '') + '>' + m.l + '</th>';
+  });
+  h2 += '<th class="enc-tot-col">Total</th>';
+  modes.forEach((m, i) => {
+    h2 += '<th' + (i === 0 ? ' class="enc-sep"' : '') + '>' + m.l + '</th>';
+  });
+  h2 += '<th class="enc-tot-col">Total</th>';
+  h2 += '<th class="enc-sep">caisse</th></tr>';
+  tbl.innerHTML = '<thead>' + h1 + h2 + '</thead>';
+
+  const tb = document.createElement('tbody');
+  const totC = {}, totR = {};
+  let sumTotC = 0, sumTotR = 0, sumEc = 0, nbEc = 0;
+
+  for (let d = 1; d <= D; d++) {
+    const dd = getDaily(S.y, S.m, d);
+    const clyo = (dd && dd.clyo) || {};
+    const reel = (dd && dd.reel) || {};
+    const vide = !modes.some(m => clyo[m.k] || reel[m.k]);
+    const w = dow(S.y, S.m, d);
+    const tr = document.createElement('tr');
+    tr.className = 'enc-mois-row' + (vide ? ' enc-mois-row--vide' : '') +
+      (w === 0 ? ' enc-mois-row--dim' : '');
+
+    let html = '<td class="enc-sticky enc-jour">' +
+      '<b>' + d + '</b><span>' + DN[w].slice(0, 2) + '</span></td>';
+
+    let tc = 0;
+    modes.forEach((m, i) => {
+      const v = clyo[m.k] || 0;
+      tc += v; totC[m.k] = (totC[m.k] || 0) + v;
+      html += '<td' + (i === 0 ? ' class="enc-sep"' : '') + '>' + eur(v) + '</td>';
+    });
+    sumTotC += tc;
+    html += '<td class="enc-tot-col">' + eur(tc) + '</td>';
+
+    let trl = 0;
+    modes.forEach((m, i) => {
+      const v = reel[m.k] || 0;
+      trl += v; totR[m.k] = (totR[m.k] || 0) + v;
+      html += '<td' + (i === 0 ? ' class="enc-sep"' : '') + '>' + eur(v) + '</td>';
+    });
+    sumTotR += trl;
+    html += '<td class="enc-tot-col">' + eur(trl) + '</td>';
+
+    const ec = ecartCaisseJour(S.y, S.m, d);
+    if (ec === null) {
+      html += '<td class="enc-sep enc-na">·</td>';
+    } else {
+      const a = Math.abs(ec);
+      const cls = a < 0.01 ? 'is-ok' : a < 5 ? 'is-warn' : 'is-bad';
+      html += '<td class="enc-sep"><span class="enc-pill ' + cls + '">' +
+        (ec > 0 ? '+' : '') + ec.toFixed(2) + '</span></td>';
+      sumEc += ec; nbEc++;
+    }
+    tr.innerHTML = html;
+    tr.title = 'Ouvrir la saisie du ' + d + ' ' + MN[S.m];
+    tr.onclick = ((day) => () => { openSaisie(day); })(d);
+    tb.appendChild(tr);
+  }
+  tbl.appendChild(tb);
+
+  const tf = document.createElement('tfoot');
+  let ft = '<tr><td class="enc-sticky">TOTAL</td>';
+  modes.forEach((m, i) => {
+    ft += '<td' + (i === 0 ? ' class="enc-sep"' : '') + '>' + eur(totC[m.k] || 0) + '</td>';
+  });
+  ft += '<td class="enc-tot-col">' + eur(sumTotC) + '</td>';
+  modes.forEach((m, i) => {
+    ft += '<td' + (i === 0 ? ' class="enc-sep"' : '') + '>' + eur(totR[m.k] || 0) + '</td>';
+  });
+  ft += '<td class="enc-tot-col">' + eur(sumTotR) + '</td>';
+  ft += '<td class="enc-sep">' +
+    (nbEc ? (sumEc > 0 ? '+' : '') + sumEc.toFixed(2) : '·') + '</td></tr>';
+  tf.innerHTML = ft;
+  tbl.appendChild(tf);
+
+  scroll.appendChild(tbl);
+  box.appendChild(scroll);
+
+  const note = document.createElement('p');
+  note.className = 'enc-mois-note';
+  note.textContent = 'Seuls les modes utilisés ce mois sont affichés. ' +
+    'Clique une ligne pour ouvrir la saisie du jour.';
+  box.appendChild(note);
+
+  const foot = document.createElement('div');
+  foot.className = 'modal-foot--end-only';
+  foot.appendChild(mBtn('Fermer', false, closeModal));
+  box.appendChild(foot);
+}
+
 function mFicheSalarie(box) {
   box.classList.add('mo--stats');
   const eur2 = (n) => n.toLocaleString('fr-FR',
@@ -13394,7 +13954,6 @@ function mSaisie(box, asView) {
     { key: 'ancv',     label: 'ANCV / Ch. vacances' },
     { key: 'esp',      label: 'Espèces' },
     { key: 'bons',     label: 'Bons cadeaux', annot: true },
-    { key: 'depenses', label: 'Dépenses' },
     { key: 'chq',      label: 'Chèques', rare: true },
     { key: 'vrmnt',    label: 'Virement', rare: true },
     { key: 'vad',      label: 'VAD', rare: true },
@@ -13446,19 +14005,24 @@ function mSaisie(box, asView) {
       noteInp.type = 'text';
       noteInp.id = 'encnote_' + row.key;
       noteInp.className = 'form-input--sm enc-annot-note';
-      noteInp.placeholder = '📝 Note (nom, table, échéance…)';
+      noteInp.placeholder = (row.key === 'depenses')
+        ? '📝 Nature de la dépense (gazoil, courses…)'
+        : '📝 Note (nom, table, échéance…)';
       noteInp.value = ne.note || '';
-      const paidLbl = document.createElement('label');
-      paidLbl.className = 'enc-annot-paid';
-      const paidChk = document.createElement('input');
-      paidChk.type = 'checkbox';
-      paidChk.id = 'encpaid_' + row.key;
-      paidChk.checked = !!ne.paid;
-      paidLbl.appendChild(paidChk);
-      paidLbl.appendChild(document.createTextNode(
-        row.key === 'credit' ? ' Réglé' : ' Utilisé'));
       wrap.appendChild(noteInp);
-      wrap.appendChild(paidLbl);
+      // Une dépense est déjà décaissée : pas de statut à cocher.
+      if (!row.sansStatut) {
+        const paidLbl = document.createElement('label');
+        paidLbl.className = 'enc-annot-paid';
+        const paidChk = document.createElement('input');
+        paidChk.type = 'checkbox';
+        paidChk.id = 'encpaid_' + row.key;
+        paidChk.checked = !!ne.paid;
+        paidLbl.appendChild(paidChk);
+        paidLbl.appendChild(document.createTextNode(
+          row.key === 'credit' ? ' Réglé' : ' Utilisé'));
+        wrap.appendChild(paidLbl);
+      }
       cell.appendChild(wrap);
       trN.appendChild(cell);
       encBody.appendChild(trN);
@@ -13480,6 +14044,131 @@ function mSaisie(box, asView) {
     '</tr>';
   encTbl.appendChild(tfoot);
   b4.appendChild(encTbl);
+
+  // ── Dépenses du jour : liste multi-lignes ─────────────────────────────
+  // Chaque dépense a son montant, sa nature et l'indication d'une facture.
+  // Le total alimente dd.reel.depenses (utilisé par les calculs existants).
+  (function () {
+    const depWrap = document.createElement('div');
+    depWrap.className = 'dep-block';
+    depWrap.innerHTML = "<div class='dep-title'>💸 Dépenses du jour</div>";
+
+    const list = document.createElement('div');
+    list.className = 'dep-list';
+    list.id = 'dep-list';
+    depWrap.appendChild(list);
+
+    // Reprise de l'ancien format (un montant unique) si besoin
+    let items = Array.isArray(dd.depensesList) ? dd.depensesList.slice() : null;
+    if (!items) {
+      items = [];
+      const ancien = (dd.reel && dd.reel.depenses) || 0;
+      if (ancien) {
+        items.push({
+          montant: ancien,
+          note: (dd.notesEnc && dd.notesEnc.depenses && dd.notesEnc.depenses.note) || '',
+          facture: false
+        });
+      }
+    }
+    saisieCtx()._depenses = items;
+
+    const majTotal = () => {
+      const t = items.reduce((a, it) => a + (parseFloat(it.montant) || 0), 0);
+      const el = document.getElementById('dep-total');
+      if (el) el.textContent = t ? t.toLocaleString('fr-FR',
+        { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €' : '—';
+      if (typeof recalcControle === 'function') recalcControle();
+      scheduleAutosave();
+    };
+
+    const dessiner = () => {
+      list.innerHTML = '';
+      if (!items.length) {
+        const e = document.createElement('div');
+        e.className = 'dep-empty';
+        e.textContent = 'Aucune dépense ce jour.';
+        list.appendChild(e);
+      }
+      items.forEach((it, i) => {
+        const row = document.createElement('div');
+        row.className = 'dep-row';
+
+        const mt = document.createElement('input');
+        mt.type = 'number';
+        mt.step = '0.01';
+        mt.className = 'form-input--sm dep-montant saisie-enter';
+        mt.placeholder = '0.00';
+        mt.value = it.montant != null ? it.montant : '';
+        mt.addEventListener('wheel', () => mt.blur(), { passive: true });
+        mt.addEventListener('keydown', (ev) => {
+          if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') ev.preventDefault();
+        });
+        mt.oninput = () => {
+          const v = parseFloat(mt.value);
+          items[i].montant = isNaN(v) ? null : v;
+          majTotal();
+        };
+
+        const nt = document.createElement('input');
+        nt.type = 'text';
+        nt.className = 'form-input--sm dep-note saisie-enter';
+        nt.placeholder = 'Nature (gazoil, courses…)';
+        nt.value = it.note || '';
+        nt.oninput = () => { items[i].note = nt.value; scheduleAutosave(); };
+
+        const facLbl = document.createElement('label');
+        facLbl.className = 'dep-facture' + (it.facture ? ' is-on' : '');
+        const facChk = document.createElement('input');
+        facChk.type = 'checkbox';
+        facChk.checked = !!it.facture;
+        facChk.onchange = () => {
+          items[i].facture = facChk.checked;
+          facLbl.classList.toggle('is-on', facChk.checked);
+          scheduleAutosave();
+        };
+        facLbl.appendChild(facChk);
+        facLbl.appendChild(document.createTextNode(' Facture'));
+
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'dep-del';
+        del.innerHTML = '✕';
+        del.title = 'Supprimer cette dépense';
+        del.onclick = () => { items.splice(i, 1); dessiner(); majTotal(); };
+
+        row.appendChild(mt);
+        row.appendChild(nt);
+        row.appendChild(facLbl);
+        row.appendChild(del);
+        list.appendChild(row);
+      });
+    };
+    dessiner();
+
+    const bar = document.createElement('div');
+    bar.className = 'dep-bar';
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'btn bg btn-sm';
+    add.textContent = '+ Ajouter une dépense';
+    add.onclick = () => {
+      items.push({ montant: null, note: '', facture: false });
+      dessiner();
+      const champs = list.querySelectorAll('.dep-montant');
+      const dernier = champs[champs.length - 1];
+      if (dernier) dernier.focus();
+    };
+    const tot = document.createElement('div');
+    tot.className = 'dep-total';
+    tot.innerHTML = "Total <b id='dep-total'>—</b>";
+    bar.appendChild(add);
+    bar.appendChild(tot);
+    depWrap.appendChild(bar);
+
+    b4.appendChild(depWrap);
+    setTimeout(majTotal, 50);
+  })();
 
   // Bouton « + Autres modes » : déplie les modes de paiement rarement
   // utilisés. Masqué si l'un d'eux contient déjà une valeur (ils sont
@@ -14017,6 +14706,25 @@ function saveSaisieForm(box, d) {
   ['credit', 'bons'].forEach(k => { const v = noteOf(k); if (v) ne[k] = v; });
   if (Object.keys(ne).length) dd.notesEnc = ne;
   else if (dd.notesEnc) delete dd.notesEnc;
+
+  // Dépenses multiples du jour : on garde la liste détaillée et on reporte
+  // le total dans dd.reel.depenses (utilisé par les calculs existants).
+  const ctxDep = saisieCtx();
+  if (ctxDep && Array.isArray(ctxDep._depenses)) {
+    const liste = ctxDep._depenses.filter(
+      it => (parseFloat(it.montant) || 0) !== 0 || (it.note || '').trim() !== '');
+    if (liste.length) {
+      dd.depensesList = liste.map(it => ({
+        montant: parseFloat(it.montant) || 0,
+        note: (it.note || '').trim(),
+        facture: !!it.facture
+      }));
+      dd.reel.depenses = dd.depensesList.reduce((a, it) => a + it.montant, 0);
+    } else {
+      delete dd.depensesList;
+      dd.reel.depenses = null;
+    }
+  }
 
   const obsEl = document.getElementById('saisie_obs');
   dd.obs = obsEl ? obsEl.value : '';
