@@ -5376,6 +5376,21 @@ function clearDaySaisie(year, month, day) {
   save();
 }
 
+/* CA réel encaissé d'un jour = total de la colonne Réel (caisse), avec les
+   mêmes exclusions que les écarts (AMEX déjà compris dans la CB,
+   « À encaisser » hors calcul). C'est ce montant qui fait foi comme CA,
+   le CA déclaré par les serveurs servant au contrôle de caisse. */
+function caReelJour(year, month, day) {
+  const dd = getDaily(year, month, day);
+  if (!dd || !dd.reel) return null;
+  let tot = 0, has = false;
+  Object.keys(dd.reel).forEach(k => {
+    if (!modeCompteDansEcart(k)) return;
+    if (dd.reel[k]) { tot += dd.reel[k]; has = true; }
+  });
+  return has ? tot : null;
+}
+
 /* Écart de caisse d'un jour : (CA réel − CA déclaré serveurs)
    + (fond jour − fond veille). « À encaisser » exclu du CA réel.
    Retourne null si aucune donnée exploitable. */
@@ -8615,8 +8630,10 @@ function rCaisse() {
   for (let d = 1; d <= D; d++) {
     const dd = getDaily(S.y, S.m, d);
     const ddN1 = getDailyN1(S.y, S.m, d);
-    const ca = dd && dd.ca ? dd.ca : null;
-    const caN1 = ddN1 && ddN1.ca ? ddN1.ca : null;
+    // Le CA affiché est le montant RÉELLEMENT encaissé en caisse. Un jour
+    // sans encaissement saisi reste vide : c'est une information utile.
+    const ca = caReelJour(S.y, S.m, d);
+    const caN1 = caReelJour(S.y - 1, S.m, d);
     const couv = dd && dd.couv ? dd.couv : null;
     const couvN1 = ddN1 && ddN1.couv ? ddN1.couv : null;
     const reel = dd ? totalReel(dd) : 0;
