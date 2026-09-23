@@ -4488,7 +4488,7 @@ const EMPLOYEES_INIT = [
   // principale, mais l'algo peut l'utiliser en dernier recours pour combler
   // un poste essentiel resté vide en phase 5.
   { id: 25, n: 'VINCENT', s: 'salle', t: 'extra', h: 104, jt: 'all',
-    bouchTrou: 1, ec: 1, r: ['DC','CR','DS','AI'],
+    noAutoGen: 1, ec: 1, r: ['DC','CR','DS','AI'],
     col: 'slate', cpTotal: 25 }
 ];
 
@@ -6250,6 +6250,10 @@ function autoGen(mode) {
     let eligibles = PRIMARY_TIER.filter(id => canTakeChaud(id, d));
     if (!eligibles.length) eligibles = FALLBACK_TIER.filter(id => canTakeChaud(id, d));
     if (!eligibles.length) continue;
+    // Plafond d'heures : on préfère un titulaire qui ne dépasse pas trop
+    // son contrat (sauf si tous sont au plafond).
+    const chSousPlafond = eligibles.filter(id => !auPlafond(findEmp(id), 'CH'));
+    if (chSousPlafond.length) eligibles = chSousPlafond;
 
     /* Rotation équilibrée pondérée par contrat :
        On compare le TAUX DE REMPLISSAGE (hoursCount / contrat) plutôt que
@@ -6301,6 +6305,19 @@ function autoGen(mode) {
   }
 
   // --- Fonction de tri des candidats pour un poste/jour donné ---
+  /* Un salarié sous contrat est « au plafond » quand ce poste lui ferait
+     dépasser son contrat du mois (avenant et congés compris) de plus de
+     TOLERANCE_SURPLUS. Il passe alors après les extras disponibles, mais
+     reste mobilisable si personne d'autre ne peut prendre le poste. */
+  function auPlafond(e, postCode) {
+    const TOLERANCE_SURPLUS = 0.10;   // +10 % toléré
+    if (!e || (e.t || 'contrat') === 'extra') return false;
+    const contrat = contratDuNow(e);
+    if (!contrat) return false;
+    const apres = (hoursCount[e.id] || 0) + postH(postCode);
+    return apres > contrat * (1 + TOLERANCE_SURPLUS);
+  }
+
   function sortCandidates(candidates, day, postCode) {
     const isCuisinePost = POSTES_CUISINE.some(p => p.c === postCode);
     const isMonday = dow(S.y, S.m, day) === 1;
@@ -6308,6 +6325,11 @@ function autoGen(mode) {
     candidates.sort((a, b) => {
       const ta = a.t || 'contrat';
       const tb = b.t || 'contrat';
+
+      // -1. Plafond d'heures : ceux qui dépasseraient trop leur contrat
+      //     passent après tous les autres (extras compris).
+      const pa = auPlafond(a, postCode), pb = auPlafond(b, postCode);
+      if (pa !== pb) return pa ? 1 : -1;
 
       /* RÈGLE EXTRAS-PRIORITAIRES : sur les postes "secondaires" (service
          partiel midi + Crudités, Dessert, Aide), les extras passent avant
@@ -6318,8 +6340,10 @@ function autoGen(mode) {
          Postes où extras prioritaires : S3, S4, S5, S6, S7, PL, EX, CR, DS, AI
          Postes où contrats prioritaires (inchangé) : S1, S2, CH, DC */
       // 0. Priorité explicite d'abord (1=premier, 99=dernier, défaut 30 contrat / 60 extra)
-      const pa0 = a.prio !== undefined ? a.prio : (a.t === 'extra' ? 60 : 30);
-      const pb0 = b.prio !== undefined ? b.prio : (b.t === 'extra' ? 60 : 30);
+      // Priorité par défaut = 50 (même valeur que la fiche), pour qu'ouvrir
+      // et enregistrer une fiche ne change pas le rang d'un salarié.
+      const pa0 = (a.prio !== undefined && a.prio !== null) ? a.prio : 50;
+      const pb0 = (b.prio !== undefined && b.prio !== null) ? b.prio : 50;
       if (pa0 !== pb0) return pa0 - pb0;
       // À prio égale : contrats avant extras
       if (ta === 'contrat' && tb === 'extra') return -1;
@@ -6448,6 +6472,12 @@ function autoGen(mode) {
       // Filtres préférentiels (non bloquants — on les annule si liste vide)
       let candidates = eligible;
 
+      // Plafond d'heures : tant qu'il existe des candidats qui ne dépassent
+      // pas trop leur contrat (ou des extras), on écarte ceux qui sont au
+      // plafond. Prioritaire sur les préférences de confort ci-dessous.
+      const sousPlafond = candidates.filter(e => !auPlafond(e, postCode));
+      if (sousPlafond.length) candidates = sousPlafond;
+
       /* FILTRE PRÉFÉRENTIEL : éviter le Nème jour consécutif si possible.
          Utilise empMaxConsec-1 pour respecter la limite personnalisée de chaque
          employé (ex: Patricia maxConsec=4 → éviter dès le 4e jour consécutif). */
@@ -6492,9 +6522,12 @@ function autoGen(mode) {
 
       // 4. Préférer les salariés restreints à ce poste (ils ne peuvent
       //    aller nulle part ailleurs — cas Albertine rs=["S7"])
+      //    Uniquement les vrais spécialistes (un seul poste autorisé, ex.
+      //    Albertine à la plonge), et seulement s'ils ne sont pas déjà au
+      //    plafond de leurs heures.
       const restricted = candidates.filter(e => {
         const rs = e.rs || [];
-        return rs.length > 0 && rs.indexOf(postCode) >= 0;
+        return rs.length === 1 && rs[0] === postCode && !auPlafond(e, postCode);
       });
       if (restricted.length) candidates = restricted;
 
@@ -6508,6 +6541,7 @@ function autoGen(mode) {
       const chosen = candidates[0];
       setSlot(d, postCode, chosen.id);
       daysCount[chosen.id]++;
+      hoursCount[chosen.id] = (hoursCount[chosen.id] || 0) + postH(postCode);
       assignedToday[chosen.id] = 1;
     }
   }
@@ -6620,6 +6654,7 @@ function autoGen(mode) {
         const chosen = fillable[0];
         setSlot(d, postCode, chosen.id);
         daysCount[chosen.id] = (daysCount[chosen.id] || 0) + 1;
+        hoursCount[chosen.id] = (hoursCount[chosen.id] || 0) + postH(postCode);
       } else {
         stillUncovered.push(postCode + ' j.' + d);
       }
@@ -7377,7 +7412,7 @@ function load() {
           // Mise à jour du cache local avec le TS Drive
           try {
             localStorage.setItem('plan_v9', JSON.stringify({
-              pl: S.pl, ind: S.ind, cp: S.cp, mal: S.mal,
+              pl: S.pl, ind: S.ind, cp: S.cp, mal: S.mal, pm: S.pm,
               notes: S.notes, dc: S.dc, real: S.real, daily: S.daily, closed: S.closed,
               emps: S.emps, _ts: driveTs
             }));
@@ -17792,12 +17827,13 @@ if (_natacha) {
 // présent dans localStorage/Drive — on le retire au chargement.
 const _doro = findEmp(18);
 if (_doro && _doro.noAutoGen) delete _doro.noAutoGen;
+// Migration : VINCENT n'est plus « bouche-trou ». Il est exclu de
+// l'auto-génération et placé uniquement à la main (s'exécute une seule fois :
+// une fois bouchTrou retiré, la condition ne se déclenche plus).
 const _vincent = findEmp(25);
-if (_vincent && _vincent.noAutoGen) delete _vincent.noAutoGen;
-// Migration : VINCENT est désormais "bouche-trou" — exclu de la génération
-// principale, utilisé par la phase 5 pour combler les postes restés vides.
-if (_vincent && !_vincent.bouchTrou) {
-  _vincent.bouchTrou = 1;
+if (_vincent && _vincent.bouchTrou) {
+  delete _vincent.bouchTrou;
+  _vincent.noAutoGen = 1;
   save();
 }
 
