@@ -4924,6 +4924,34 @@ function wasChaudSun(empId, day) {
   return dow(S.y, S.m, day) === 1 && day >= 2 && getSlot(day - 1, 'CH') === empId;
 }
 
+/* Longueur de la série d'Ouvertures (S1) consécutives qu'aurait `empId`
+   s'il était placé en S1 le jour `day` : compte les jours d'avant (y compris
+   la fin du mois précédent) et ceux d'après déjà affectés. */
+function serieOuverture(empId, day) {
+  const slotS1 = (y, m, d) => {
+    const k = y + '-' + String(m + 1).padStart(2, '0');
+    const j = (S.pl[k] || {})[d];
+    return j ? j.S1 : null;
+  };
+  let n = 1;
+  // en arrière
+  let y = S.y, m = S.m, d = day;
+  for (let i = 0; i < 5; i++) {
+    d--;
+    if (d < 1) { m--; if (m < 0) { m = 11; y--; } d = dim(y, m); }
+    if (slotS1(y, m, d) === empId) n++; else break;
+  }
+  // en avant (dans le mois)
+  for (let dd = day + 1; dd <= dim(S.y, S.m); dd++) {
+    if (slotS1(S.y, S.m, dd) === empId) n++; else break;
+  }
+  return n;
+}
+/* Règle : jamais 3 Ouvertures d'affilée pour la même personne. */
+function ouvertureInterdite(empId, day) {
+  return serieOuverture(empId, day) >= 3;
+}
+
 function wasS1x2(empId, day) {
   return day >= 3
       && getSlot(day - 1, 'S1') === empId
@@ -6443,6 +6471,8 @@ function autoGen(mode) {
         const empMaxConsec = e.maxConsec || RL.mjc;
         if (consecBefore(e.id, d) >= empMaxConsec) continue;
         if (needsRest2(e.id, d)) continue;
+        // Ouverture : jamais 3 jours d'affilée (règle stricte)
+        if (postCode === 'S1' && ouvertureInterdite(e.id, d)) continue;
 
         if (e.maxDPW && daysInWeek(e.id, d) >= e.maxDPW) continue;
 
@@ -6563,6 +6593,7 @@ function autoGen(mode) {
      ─────────────────────────────────────────────────────────────────────── */
   function canFillEssential(e, d, postCode, allowBouchTrou) {
     if (e.noAutoGen) return false;
+    if (postCode === 'S1' && ouvertureInterdite(e.id, d)) return false;
     if (e.bouchTrou && !allowBouchTrou) return false;
 
     /* Pour un bouche-trou, on ignore les indispos (sa raison d'être :
