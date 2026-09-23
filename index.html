@@ -11541,7 +11541,7 @@ function mConfig(box, asView) {
       "<div class='cfg-count-label'>" + label + '</div>';
     return tile;
   }
-  const cTile = makeCountTile(ac.length,            'Cuisine');
+  const cTile = makeCountTile(ac.length,            'Cuisine', 'cuisine');
   const sTile = makeCountTile(as_.length,           'Salle',   'salle');
   const tTile = makeCountTile(ac.length + as_.length,'Total',   'total');
   cTile.id = 'cCnt';
@@ -11605,7 +11605,7 @@ function mConfig(box, asView) {
     buildPostSection(PC, ac, '🍳 Cuisine', '#c2410c', 'cuisine')
   );
   box.appendChild(
-    buildPostSection(PS, as_, '🍽 Salle', '#1d4ed8')
+    buildPostSection(PS, as_, '🍽 Salle', '#1d4ed8', 'salle')
   );
 
   // ── Bouton "Copier vers tous les jours" ────────────────────────────────
