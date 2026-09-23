@@ -4448,7 +4448,7 @@ const EMPLOYEES_INIT = [
     col: 'emerald', cpTotal: 25 },
 
   { id: 14, n: 'Juliette', s: 'salle', t: 'contrat', h: 169, jt: 'all',
-    maxConsec: 4, pmDow: [0],
+    pmDow: [0],
     col: 'cyan', cpTotal: 25 },
 
   { id: 15, n: 'Mickaelle', s: 'salle', t: 'extra', h: 130, jt: 'all',
@@ -4950,6 +4950,29 @@ function serieOuverture(empId, day) {
 /* Règle : jamais 3 Ouvertures d'affilée pour la même personne. */
 function ouvertureInterdite(empId, day) {
   return serieOuverture(empId, day) >= 3;
+}
+
+/* Polyvalent = salarié de salle qui peut aussi tenir des postes de cuisine. */
+function estPolyvalent(e) {
+  return !!(e && e.ec && (e.r || []).some(p => p !== 'CH'));
+}
+/* Part des jours travaillés ce mois (jusqu'à `avantJour` exclu) passés dans
+   la section donnée ('cuisine' ou 'salle'). Retourne { part, total }. */
+function partSection(empId, section, avantJour) {
+  const k = mk();
+  const pl = S.pl[k] || {};
+  let c = 0, sa = 0;
+  Object.keys(pl).forEach(dStr => {
+    const d = parseInt(dStr, 10);
+    if (avantJour && d >= avantJour) return;
+    const j = pl[dStr] || {};
+    Object.keys(j).forEach(pc => {
+      if (j[pc] !== empId) return;
+      if (POSTES_CUISINE.some(p => p.c === pc)) c++; else sa++;
+    });
+  });
+  const total = c + sa;
+  return { part: total ? (section === 'cuisine' ? c : sa) / total : 0, total: total };
 }
 
 function wasS1x2(empId, day) {
@@ -6021,6 +6044,224 @@ function matchEmp(name) {
      - S1 : éviter 3 jours d'affilée même personne
 
    ═══════════════════════════════════════════════════════════════════════════ */
+/* Dépassement toléré des contrats avant de faire appel aux extras (+20 %).
+   Au-delà, un salarié sous contrat n'est utilisé qu'en dernier recours. */
+const SURPLUS_MAX = 0.20;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   OPTIMISATION APRÈS GÉNÉRATION — optimiserPlanning(ctx)
+   ───────────────────────────────────────────────────────────────────────────
+   L'auto-génération remplit le mois jour par jour : elle ne voit pas la fin
+   du mois quand elle décide du début. Cette passe relit le planning COMPLET
+   et cherche des modifications qui l'améliorent globalement :
+     • combler un poste resté vide ;
+     • remplacer la personne d'un poste par une autre (ex. un contrat en fort
+       dépassement remplacé par un extra disponible) ;
+     • échanger deux personnes le même jour (ex. une polyvalente passe en
+       salle et une autre en cuisine).
+   Une modification n'est retenue que si elle améliore le score global ET
+   ne crée aucune infraction aux règles (repos, jours max, Ouverture,
+   week-end de repos, jours/semaine…). Le Chaud et les affectations fixes
+   ne sont jamais touchés.
+
+   Score (plus bas = mieux) :
+     • poste vide ............................ 100
+     • heures au-delà de contrat +20 % ........ 6 / h
+     • heure d'extra .......................... 1 / h
+     • heures entre contrat et +20 % .......... 0,3 / h  (surplus toléré)
+     • heures manquantes sous le contrat ..... 2 / h
+     • polyvalent : écart cuisine/salle ....... 3 / jour
+     • poste « à éviter » (Jessica en Ouv.) ... 2
+   ═══════════════════════════════════════════════════════════════════════════ */
+function optimiserPlanning(ctx) {
+  const D = dim(S.y, S.m);
+  const k = mk();
+  const weekendOff = ctx.weekendOff || {};
+  const maxDays = ctx.maxDaysInMonth || 21;
+  const CUI = {}; POSTES_CUISINE.forEach(p => { CUI[p.c] = true; });
+
+  // Grille locale (plus rapide que getSlot) — reportée dans S.pl à la fin
+  const grid = {}, actifs = {};
+  for (let d = 1; d <= D; d++) {
+    grid[d] = {};
+    actifs[d] = isClosed(d) ? [] : getActivePosts(d);
+    AP.forEach(p => { const v = getSlot(d, p.c); if (v != null) grid[d][p.c] = v; });
+  }
+  const emps = S.emps.filter(e => !e.inactif);
+  const byId = {}; emps.forEach(e => { byId[e.id] = e; });
+
+  const posteDuJour = (id, d) => {
+    const g = grid[d];
+    for (const pc in g) if (g[pc] === id) return pc;
+    return null;
+  };
+
+  // Slots protégés : Chaud, affectations fixes, Natacha en Ouverture dim/férié
+  const verrous = ctx.verrous || {};
+  const protege = (d, pc, id) => {
+    if (pc === 'CH') return true;
+    if (verrous[d + ':' + pc]) return true;   // placement manuel conservé
+    if (id == null) return false;
+    const e = byId[id]; if (!e) return true;
+    const w = dow(S.y, S.m, d);
+    if ((e.fixed || []).some(f => f.dow === w && f.pc === pc)) return true;
+    if (id === 11 && pc === 'S1' && (w === 0 || isFerie(S.y, S.m, d))) return true;
+    return false;
+  };
+
+  // Nombre d'infractions aux règles pour un salarié (sur le mois)
+  function infractions(e) {
+    if (!e) return 0;
+    const w = [], s1 = [];
+    let n = 0, v = 0;
+    for (let d = 1; d <= D; d++) {
+      const pc = posteDuJour(e.id, d);
+      w[d] = !!pc; s1[d] = pc === 'S1';
+      if (pc) n++;
+      if (pc && weekendOff[e.id] && weekendOff[e.id].indexOf(d) >= 0) v++;
+    }
+    if (n > maxDays) v++;
+    const mc = e.maxConsec || RL.mjc;
+    let run = 0;
+    for (let d = 1; d <= D + 1; d++) {
+      if (d <= D && w[d]) { run++; continue; }
+      if (run > mc) v++;
+      if (run >= mc) {                       // 2 jours de repos après la série
+        if (d <= D && w[d]) v++;
+        if (d + 1 <= D && w[d + 1]) v++;
+      }
+      run = 0;
+    }
+    let r1 = 0;                               // jamais 3 Ouvertures d'affilée
+    for (let d = 1; d <= D; d++) { r1 = s1[d] ? r1 + 1 : 0; if (r1 === 3) v++; }
+    if (e.maxDPW) {                           // jours max par semaine
+      const sem = {};
+      for (let d = 1; d <= D; d++) if (w[d]) {
+        const wd = dow(S.y, S.m, d);
+        const lun = d - (wd === 0 ? 6 : wd - 1);
+        sem[lun] = (sem[lun] || 0) + 1;
+      }
+      Object.keys(sem).forEach(kk => { if (sem[kk] > e.maxDPW) v++; });
+    }
+    for (let d = 1; d <= D; d++) {            // 48 h max par semaine (légal)
+      if (dow(S.y, S.m, d) !== 1) continue;
+      let hs = 0;
+      for (let x = d; x < d + 7 && x <= D; x++) {
+        const pcx = posteDuJour(e.id, x);
+        if (pcx) hs += postH(pcx);
+      }
+      if (hs > 48) v++;
+    }
+    let weLibre = false, weExiste = false;    // au moins un week-end libre
+    for (let d = 1; d < D; d++) {
+      if (dow(S.y, S.m, d) === 6) {
+        weExiste = true;
+        if (!w[d] && !w[d + 1]) weLibre = true;
+      }
+    }
+    if (weExiste && !weLibre) v++;
+    return v;
+  }
+
+  // Coût d'un salarié (heures vs contrat, équilibre, postes à éviter)
+  function cout(e) {
+    if (!e || e.noAutoGen) return 0;
+    let h = 0, cu = 0, sa = 0, evite = 0;
+    for (let d = 1; d <= D; d++) {
+      const pc = posteDuJour(e.id, d);
+      if (!pc) continue;
+      h += postH(pc);
+      if (CUI[pc]) cu++; else sa++;
+      if ((e.lowPrioPost || []).indexOf(pc) >= 0) evite++;
+    }
+    let c = 0;
+    if ((e.t || 'contrat') !== 'extra') {
+      const ct = contratDuNow(e) || 0;
+      if (ct) {
+        const plafond = ct * (1 + SURPLUS_MAX);
+        c += 6 * Math.max(0, h - plafond);                       // au-delà de +20 %
+        c += 0.3 * Math.max(0, Math.min(h, plafond) - ct);       // surplus toléré
+        c += 2 * Math.max(0, ct - h);                            // sous le contrat
+      }
+    } else {
+      c += 1 * h;   // une heure d'extra coûte plus qu'une heure de surplus toléré
+    }
+    if (estPolyvalent(e) && cu + sa >= 2) c += 3 * Math.abs(cu - sa);
+    c += 2 * evite;
+    return c;
+  }
+
+  const peutPrendre = (e, d, pc) =>
+    e && !e.noAutoGen && !e.bouchTrou && canAssign(e, d, pc)
+      && !(weekendOff[e.id] && weekendOff[e.id].indexOf(d) >= 0);
+
+  let gains = 0, modifs = 0;
+  for (let passe = 0; passe < 6; passe++) {
+    let ameliore = false;
+    for (let d = 1; d <= D; d++) {
+      const postes = actifs[d];
+      for (let i = 0; i < postes.length; i++) {
+        const pc = postes[i];
+        const X = grid[d][pc];
+        if (protege(d, pc, X)) continue;
+        const eX = X != null ? byId[X] : null;
+
+        // ── Remplacer / combler ─────────────────────────────────────────
+        let meilleur = null, meilleurGain = 0.01;
+        const coutXavant = cout(eX), infXavant = infractions(eX);
+        for (let j = 0; j < emps.length; j++) {
+          const eY = emps[j];
+          if (eY.id === X || posteDuJour(eY.id, d)) continue;
+          if (!peutPrendre(eY, d, pc)) continue;
+          const coutYavant = cout(eY), infYavant = infractions(eY);
+          grid[d][pc] = eY.id;
+          const infYapres = infractions(eY), infXapres = infractions(eX);
+          if (infYapres <= infYavant && infXapres <= infXavant) {
+            const gain = (coutXavant + coutYavant + (X == null ? 100 : 0))
+                       - (cout(eX) + cout(eY));
+            if (gain > meilleurGain) { meilleurGain = gain; meilleur = eY.id; }
+          }
+          if (X != null) grid[d][pc] = X; else delete grid[d][pc];
+        }
+        if (meilleur != null) {
+          grid[d][pc] = meilleur; gains += meilleurGain; modifs++; ameliore = true;
+          continue;
+        }
+
+        // ── Échanger deux personnes le même jour ───────────────────────
+        if (X == null) continue;
+        for (let i2 = i + 1; i2 < postes.length; i2++) {
+          const pc2 = postes[i2];
+          const Y = grid[d][pc2];
+          if (Y == null || protege(d, pc2, Y)) continue;
+          const eY = byId[Y];
+          if (!peutPrendre(eX, d, pc2) || !peutPrendre(eY, d, pc)) continue;
+          const avant = cout(eX) + cout(eY);
+          const iXa = infractions(eX), iYa = infractions(eY);
+          grid[d][pc] = Y; grid[d][pc2] = X;
+          const ok = infractions(eX) <= iXa && infractions(eY) <= iYa;
+          const gain = avant - (cout(eX) + cout(eY));
+          if (ok && gain > 0.01) {
+            gains += gain; modifs++; ameliore = true;
+            break;
+          }
+          grid[d][pc] = X; grid[d][pc2] = Y;
+        }
+      }
+    }
+    if (!ameliore) break;
+  }
+
+  // Report dans le planning
+  for (let d = 1; d <= D; d++) {
+    AP.forEach(p => {
+      const v = grid[d][p.c];
+      if ((v == null ? null : v) !== getSlot(d, p.c)) setSlot(d, p.c, v == null ? null : v);
+    });
+  }
+  return { modifs: modifs, gain: Math.round(gains) };
+}
+
 function autoGen(mode) {
   mode = mode || 'replace';
   pushUndo();
@@ -6037,6 +6278,16 @@ function autoGen(mode) {
     if (!S.pl[monthKey]) S.pl[monthKey] = {};
     for (let d = 1; d <= D; d++) {
       if (!S.pl[monthKey][String(d)]) S.pl[monthKey][String(d)] = {};
+    }
+  }
+
+  // Placements existants avant génération (mode « Compléter ») : la
+  // relecture finale ne doit jamais les modifier.
+  const dejaPlaces = {};
+  if (mode !== 'replace') {
+    for (let d = 1; d <= D; d++) {
+      const j = S.pl[monthKey][String(d)] || {};
+      Object.keys(j).forEach(pc => { if (j[pc] != null) dejaPlaces[d + ':' + pc] = true; });
     }
   }
 
@@ -6335,15 +6586,14 @@ function autoGen(mode) {
   // --- Fonction de tri des candidats pour un poste/jour donné ---
   /* Un salarié sous contrat est « au plafond » quand ce poste lui ferait
      dépasser son contrat du mois (avenant et congés compris) de plus de
-     TOLERANCE_SURPLUS. Il passe alors après les extras disponibles, mais
+     SURPLUS_MAX (+20 %). Il passe alors après les extras disponibles, mais
      reste mobilisable si personne d'autre ne peut prendre le poste. */
   function auPlafond(e, postCode) {
-    const TOLERANCE_SURPLUS = 0.10;   // +10 % toléré
     if (!e || (e.t || 'contrat') === 'extra') return false;
     const contrat = contratDuNow(e);
     if (!contrat) return false;
     const apres = (hoursCount[e.id] || 0) + postH(postCode);
-    return apres > contrat * (1 + TOLERANCE_SURPLUS);
+    return apres > contrat * (1 + SURPLUS_MAX);
   }
 
   function sortCandidates(candidates, day, postCode) {
@@ -6373,6 +6623,20 @@ function autoGen(mode) {
       const pa0 = (a.prio !== undefined && a.prio !== null) ? a.prio : 50;
       const pb0 = (b.prio !== undefined && b.prio !== null) ? b.prio : 50;
       if (pa0 !== pb0) return pa0 - pb0;
+      // 1. Polyvalents (avant la règle contrats/extras) : alterner cuisine et salle. Un polyvalent qui a déjà
+      //    passé plus de la moitié de ses jours du mois dans la section de
+      //    ce poste passe après les autres candidats. Le Chaud n'est pas
+      //    concerné (règles de titulaires propres).
+      if (postCode !== 'CH') {
+        const sect = isCuisinePost ? 'cuisine' : 'salle';
+        const trop = (e) => {
+          if (!estPolyvalent(e)) return false;
+          const ps = partSection(e.id, sect, day);
+          return ps.total >= 2 && ps.part > 0.5;   // strictement plus de la moitié
+        };
+        const ta3 = trop(a), tb3 = trop(b);
+        if (ta3 !== tb3) return ta3 ? 1 : -1;
+      }
       // À prio égale : contrats avant extras
       if (ta === 'contrat' && tb === 'extra') return -1;
       if (ta === 'extra'   && tb === 'contrat') return 1;
@@ -6392,7 +6656,6 @@ function autoGen(mode) {
         if (!a.ec && b.ec) return 1;
       }
 
-      // 3. (prio déjà appliquée en step 0)
 
       // 4. Sur S1 : Jessica (lowPrioPost contient "S1") en dernier
       if (postCode === 'S1') {
@@ -6925,13 +7188,18 @@ function autoGen(mode) {
     });
   }
 
+  // Relecture globale : améliore le planning complet sans enfreindre de règle
+  const opti = optimiserPlanning({ weekendOff: weekendOff, maxDaysInMonth: maxDaysInMonth,
+                                   verrous: dejaPlaces });
+
   save();
   render();
-  if (stillUncovered.length) {
-    toast('⚠ Postes essentiels non couverts: ' +
-      stillUncovered.join(', '), 'warn2', 8000);
+  const restants = uncovered();
+  if (restants.length) {
+    toast('⚠ Postes non couverts : ' + restants.join(', '), 'warn2', 8000);
   } else {
-    toast('Planning généré ✓', 'ok');
+    toast('Planning généré ✓' + (opti.modifs ? ' — ' + opti.modifs +
+      ' ajustement' + (opti.modifs > 1 ? 's' : '') + ' après relecture' : ''), 'ok');
   }
 }
 
@@ -17834,10 +18102,12 @@ if (_agnes) {
   _agnes.chNoDow = [0];
 }
 
-// Migration : Juliette (id 14) — max 4j consécutifs + PM-only le dimanche
+// Migration : Juliette (id 14) — PM-only le dimanche.
+// La limite de 4 jours d'affilée est supprimée : elle suit la règle commune
+// (5 jours max puis 2 jours de repos). On retire l'ancienne valeur stockée.
 const _juliette = findEmp(14);
 if (_juliette) {
-  _juliette.maxConsec = 4;
+  if (_juliette.maxConsec === 4) delete _juliette.maxConsec;
   _juliette.pmDow = [0]; // 0 = dimanche
 }
 
