@@ -9520,7 +9520,7 @@ function mAutoGen(box) {
     'Après <b>5 j consécutifs</b> → 2j de repos',
     'Patricia : <b>max 4j consécutifs</b>',
     'Clarisse : <b>max 4j par semaine</b>',
-    'Monique : <b>pas le jeudi</b>',
+    'Monique : jours de travail <b>selon sa fiche</b>',
     '<b>1 weekend de repos</b> garanti/mois',
     'Monique : Chaud <b>max 1x/semaine</b>, pas dimanche',
     'Agnès : Chaud <b>jamais weekend ni férié</b>',
@@ -17766,8 +17766,6 @@ if (_agnes) {
   _agnes.chNoDow = [0];
 }
 
-// Migration : Monique (id 5) — ne travaille pas le jeudi (dow=4)
-// Force jt:custom avec jeudi exclu, quel que soit l'état stocké.
 // Migration : Juliette (id 14) — max 4j consécutifs + PM-only le dimanche
 const _juliette = findEmp(14);
 if (_juliette) {
@@ -17775,11 +17773,9 @@ if (_juliette) {
   _juliette.pmDow = [0]; // 0 = dimanche
 }
 
-const _monique = findEmp(5);
-if (_monique) {
-  _monique.jt = 'custom';
-  _monique.jours = [0, 1, 2, 3, 5, 6]; // 0=Di 1=Lu 2=Ma 3=Me 5=Ve 6=Sa — pas 4=Je
-}
+// Monique : ses jours de travail sont désormais gérés uniquement par sa
+// fiche salarié (plus de forçage au chargement — elle peut travailler le
+// jeudi si sa fiche le prévoit).
 
 // Règle spéciale Natacha (id 11) : toujours Ouverture le dimanche
 const _natacha = findEmp(11);
