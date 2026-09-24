@@ -4961,6 +4961,17 @@ function serieOuverture(empId, day) {
   }
   return n;
 }
+/* Règle : un(e) salarié(e) qui a travaillé le dimanche n'est pas en
+   Ouverture le lundi. */
+function ouvertureLundiInterdite(empId, day, pc) {
+  if (pc !== 'S1' || dow(S.y, S.m, day) !== 1) return false;
+  let y = S.y, m = S.m, d = day - 1;
+  if (d < 1) { m--; if (m < 0) { m = 11; y--; } d = dim(y, m); }
+  const k = y + '-' + String(m + 1).padStart(2, '0');
+  const j = (S.pl[k] || {})[d] || {};
+  return Object.keys(j).some(p => j[p] === empId);
+}
+
 /* Règle : jamais 3 Ouvertures d'affilée pour la même personne. */
 function ouvertureInterdite(empId, day) {
   return serieOuverture(empId, day) >= 3;
@@ -6148,6 +6159,9 @@ function optimiserPlanning(ctx) {
       }
       run = 0;
     }
+    for (let d = 2; d <= D; d++) {            // pas d'Ouverture le lundi après un dimanche travaillé
+      if (s1[d] && dow(S.y, S.m, d) === 1 && w[d - 1]) v++;
+    }
     let r1 = 0;                               // jamais 3 Ouvertures d'affilée
     for (let d = 1; d <= D; d++) { r1 = s1[d] ? r1 + 1 : 0; if (r1 === 3) v++; }
     if (e.maxDPW) {                           // jours max par semaine
@@ -6398,19 +6412,71 @@ function autoGen(mode) {
     const firstPairs = julieFirst ? pairsJulie : pairsPatricia;
     const secondPairs = julieFirst ? pairsPatricia : pairsJulie;
 
-    if (firstPairs.length && eligible(firstId)) {
-      weekendOff[firstId] = firstPairs[Math.floor(Math.random() * firstPairs.length)];
+    // Le dimanche, seules Julie et Patricia tiennent le Chaud : on ne donne
+    // le week-end de repos que si l'autre est disponible ce dimanche-là.
+    const autreDispoDim = (pr, autreId) => {
+      const a = findEmp(autreId);
+      return a && !a.inactif && !isAbsent(autreId, pr[1]) && canWork(a, S.y, S.m, pr[1]);
+    };
+    const firstOk = firstPairs.filter(pr => autreDispoDim(pr, secondId));
+    if (firstOk.length && eligible(firstId)) {
+      weekendOff[firstId] = firstOk[Math.floor(Math.random() * firstOk.length)];
     }
     if (secondPairs.length && eligible(secondId)) {
       const otherPairs = secondPairs.filter(p => {
         if (weekendOff[firstId] && p[0] === weekendOff[firstId][0]) return false;
-        if (isAbsent(firstId, p[1])) return false;
+        if (!autreDispoDim(p, firstId)) return false;
         return true;
       });
       if (otherPairs.length) {
         weekendOff[secondId] = otherPairs[Math.floor(Math.random() * otherPairs.length)];
       }
     }
+  }
+
+  // --- Phase 1 bis : week-end de repos pour les autres salariés à temps plein ---
+  // Règle : chaque salarié dont le contrat est d'au moins 120 h a au moins
+  // un week-end complet (samedi + dimanche) de repos dans le mois.
+  // Ne sont pas concernés : les mi-temps, les extras, les salariés qui ne
+  // travaillent que le week-end, et ceux qui ont des congés payés dans le mois.
+  // On répartit les week-ends pour ne pas mettre tout le monde en repos le
+  // même samedi-dimanche.
+  const TEMPS_PLEIN_H = 120;
+  const nbOffParWE = {};
+  Object.keys(weekendOff).forEach(id => {
+    const k = weekendOff[id][0]; nbOffParWE[k] = (nbOffParWE[k] || 0) + 1;
+  });
+  S.emps.forEach(e => {
+    if (WEEKEND_OFF_ELIGIBLE.indexOf(e.id) >= 0) return;   // Julie/Patricia : phase 1
+    if (weekendOff[e.id] || e.inactif || !eligible(e.id)) return;
+    if ((e.t || 'contrat') === 'extra') return;
+    if ((contratH(e, S.y, S.m) || 0) < TEMPS_PLEIN_H) return;
+    if (cpDuMois(S.y, S.m, e.id).length) return;   // vacances dans le mois
+    const paires = buildPairs(e.id);
+    if (!paires.length) return;
+    // Déjà un week-end entier d'absence (indispo, maladie) : règle satisfaite
+    for (let d = 1; d < D; d++) {
+      if (dow(S.y, S.m, d) === 6 && isAbsent(e.id, d) && isAbsent(e.id, d + 1)) return;
+    }
+    // En mode « Compléter », on garde un week-end où il n'est pas déjà placé
+    const libres = paires.filter(pr => getSlotsOf(e.id, pr[0]) === 0 && getSlotsOf(e.id, pr[1]) === 0);
+    // Les salariés qui tiennent le Chaud ne doivent pas être en repos le même
+    // week-end (sinon plus personne pour le Chaud le samedi).
+    const faitChaud = (x) => (x.r || []).indexOf('CH') >= 0;
+    // Nombre d'autres personnes du Chaud déjà en repos ou absentes ce samedi
+    const conflitChaud = (pr) => faitChaud(e) ? S.emps.filter(x =>
+      x.id !== e.id && !x.inactif && faitChaud(x) &&
+      ((weekendOff[x.id] && weekendOff[x.id][0] === pr[0]) || isAbsent(x.id, pr[0]))
+    ).length : 0;
+    const choix = (libres.length ? libres : paires).slice()
+      .sort((a, b) => conflitChaud(a) - conflitChaud(b)
+        || (nbOffParWE[a[0]] || 0) - (nbOffParWE[b[0]] || 0) || Math.random() - 0.5)[0];
+    weekendOff[e.id] = choix;
+    nbOffParWE[choix[0]] = (nbOffParWE[choix[0]] || 0) + 1;
+  });
+  function getSlotsOf(empId, day) {
+    const j = (S.pl[monthKey] || {})[String(day)] || {};
+    return Object.keys(j).filter(pc => j[pc] === empId).length;
   }
 
   // --- Phase 2 : affectations fixes (propriété `fixed` sur l'employé) ---
@@ -6752,6 +6818,7 @@ function autoGen(mode) {
         if (needsRest2(e.id, d)) continue;
         // Ouverture : jamais 3 jours d'affilée (règle stricte)
         if (postCode === 'S1' && ouvertureInterdite(e.id, d)) continue;
+        if (ouvertureLundiInterdite(e.id, d, postCode)) continue;
 
         if (e.maxDPW && daysInWeek(e.id, d) >= e.maxDPW) continue;
 
@@ -6873,6 +6940,7 @@ function autoGen(mode) {
   function canFillEssential(e, d, postCode, allowBouchTrou) {
     if (e.noAutoGen) return false;
     if (postCode === 'S1' && ouvertureInterdite(e.id, d)) return false;
+    if (ouvertureLundiInterdite(e.id, d, postCode)) return false;
     if (e.bouchTrou && !allowBouchTrou) return false;
 
     /* Pour un bouche-trou, on ignore les indispos (sa raison d'être :
