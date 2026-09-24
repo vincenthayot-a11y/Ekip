@@ -848,6 +848,20 @@ table.grid {
   margin-left: 2px;
 }
 
+/* ── Planning compact : le mois entier tient sur un écran ─────────────────
+   Activé par défaut (bouton « Compact » dans l'en-tête du planning). */
+body.grid-compact .dcol { height: 21px; min-width: 44px; padding: 0 5px; font-size: 10px; }
+body.grid-compact .dcol-number { font-size: 11px; }
+body.grid-compact .dcol-weekday { font-size: 9px; }
+body.grid-compact .dcol-plus-icon,
+body.grid-compact .dcol-note-icon { font-size: 8px; }
+body.grid-compact .phd { padding: 5px 3px; font-size: 9px; min-width: 76px; letter-spacing: .02em; }
+body.grid-compact .cell { height: 21px; min-width: 76px; padding: 0 2px; }
+body.grid-compact .etag { padding: 1px 5px; font-size: 9.5px; max-width: 74px; }
+body.grid-compact .plus { font-size: 12px; }
+body.grid-compact .grid-outer { max-height: none; }
+body.grid-compact .dcol-icons { transform: scale(.8); }
+
 /* Lignes spéciales (fériés + fermés) — v8 */
 .row-ferie { background: #fef9c3; }
 .row-closed {
@@ -6073,6 +6087,8 @@ const SURPLUS_MAX = 0.20;
      • polyvalent : écart cuisine/salle ....... 3 / jour
      • poste « à éviter » (Jessica en Ouv.) ... 2
    ═══════════════════════════════════════════════════════════════════════════ */
+const APP_VERSION = '24 sept. 2026 — import planning';
+
 function optimiserPlanning(ctx) {
   const D = dim(S.y, S.m);
   const k = mk();
@@ -7786,6 +7802,11 @@ window.addEventListener('offline', () => {
      principale de blocage (via mainBlockReason)
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* Planning compact (préférence mémorisée sur l'appareil, activé par défaut) */
+function gridCompact() {
+  try { return localStorage.getItem('grid_compact') !== '0'; } catch (e) { return true; }
+}
+
 function render() {
   const app = document.getElementById('app');
   if (!app) return;
@@ -7793,6 +7814,21 @@ function render() {
   // Vue courante exposée au CSS (sert à masquer les boutons flottants
   // là où ils gêneraient la barre d'action ou le contenu).
   document.body.dataset.view = S.view || 'month';
+  document.body.classList.toggle('grid-compact', gridCompact());
+
+  // Mémorise la position de défilement (page + zones qui défilent
+  // horizontalement) pour la restaurer après reconstruction, tant qu'on
+  // reste dans la même vue : une modification ne doit pas ramener en haut.
+  const memeVue = render._vue === S.view && render._m === S.m && render._y === S.y;
+  const scrollY = window.scrollY || window.pageYOffset || 0;
+  const zones = {};
+  if (memeVue) {
+    app.querySelectorAll('[id]').forEach(el => {
+      if (el.scrollLeft || el.scrollTop) zones[el.id] = [el.scrollLeft, el.scrollTop];
+    });
+  }
+  render._vue = S.view; render._m = S.m; render._y = S.y;
+
   app.innerHTML = '';
 
   // Layout général : sidebar latérale + zone de contenu
@@ -7926,6 +7962,15 @@ function render() {
   // Le header a une hauteur variable (boutons sur plusieurs lignes selon la
   // largeur), donc on la mesure après rendu.
   measureHeaderHeight();
+
+  // Restaure la position de défilement si on est resté dans la même vue
+  if (memeVue) {
+    Object.keys(zones).forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.scrollLeft = zones[id][0]; el.scrollTop = zones[id][1]; }
+    });
+    if (scrollY) window.scrollTo(0, scrollY);
+  }
 }
 
 /* Mesure la hauteur du header app et la stocke dans --header-h. */
@@ -8149,6 +8194,15 @@ function rHdr() {
       cls: 'btn bg header-btn-small' + (S.showPostsConfig ? ' on' : ''),
       label: '⚙ Postes',
       fn: () => { S.showPostsConfig = !S.showPostsConfig; render(); }
+    },
+    {
+      id: 'bcompact',
+      cls: 'btn bg header-btn-small' + (gridCompact() ? ' on' : ''),
+      label: gridCompact() ? '⤢ Agrandir' : '⤡ Compact',
+      fn: () => {
+        try { localStorage.setItem('grid_compact', gridCompact() ? '0' : '1'); } catch (e) {}
+        render();
+      }
     }
   ];
 
@@ -11598,6 +11652,12 @@ function rParametres() {
   secDrive.appendChild(testMsg);
   secDrive.appendChild(driveBtns);
   outer.appendChild(secDrive);
+
+  // Version de l'app (pour vérifier ce qui est réellement déployé)
+  const ver = document.createElement('p');
+  ver.style.cssText = 'font-size:12px;color:var(--text-3);margin:0 0 12px';
+  ver.textContent = 'Version de l\u2019app : ' + APP_VERSION;
+  outer.appendChild(ver);
 
   // ── Données — import / export ───────────────────────────────────────────
   const secData = sectionWrap('🗂 Données — import / export');
