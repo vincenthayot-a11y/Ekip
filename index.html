@@ -8210,6 +8210,7 @@ function rHdr() {
   // sidebar et la vue Caisse). Imprimer reste accessible ici.
   const moreMenu = [
     { label: 'Planning', items: [
+      { icon: '👤', txt: 'Planning individuel', fn: () => { S.modal = { type: 'planIndiv' }; render(); } },
       { icon: '📅', txt: 'Importer un planning', fn: () => { S.modal = { type: 'importPlanning' }; render(); } },
       { icon: '🗑️', txt: 'Effacer le mois', danger: true, fn: () => { S.modal = { type: 'clearMonth' }; render(); } },
       { icon: '🖨', txt: 'Imprimer', fn: () => { printPlanning(); } }
@@ -9809,6 +9810,7 @@ function rModal() {
   else if (type === 'export')           mExport(box);
   else if (type === 'importCA')         mImportCA(box);
   else if (type === 'importPlanning')   mImportPlanning(box);
+  else if (type === 'planIndiv')        mPlanIndiv(box);
   else if (type === 'annuel')           mAnnuel(box);
   else if (type === 'stats')            mStats(box);
   else if (type === 'rapLabor')         mRapLabor(box);
@@ -14023,11 +14025,68 @@ function mExport(box) {
    La fenêtre lance automatiquement window.print() au chargement.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function exportParEmploye() {
+/* Fenêtre « Planning individuel » : choisir le ou les salariés dont on
+   veut la feuille du mois (à imprimer ou enregistrer en PDF pour l'envoyer). */
+function mPlanIndiv(box) {
+  mHdr(box, '👤 Planning individuel — ' + MN[S.m] + ' ' + S.y);
+  const lead = document.createElement('p');
+  lead.style.cssText = 'font-size:13px;color:var(--text-2);margin:0 0 10px;line-height:1.5';
+  lead.textContent = 'Clique sur « PDF » à côté d’un salarié pour sa feuille du mois, ' +
+    'ou coche plusieurs personnes. Dans la fenêtre d’impression, choisis « Enregistrer en PDF » pour l’envoyer.';
+  box.appendChild(lead);
+
+  const liste = S.emps.filter(e => !e.inactif && (workedDays(e.id) > 0 ||
+    getCp(e.id).length || getMal(e.id).length));
+  const coches = {};
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'max-height:55vh;overflow:auto;border:1px solid var(--border);border-radius:10px';
+  liste.forEach(e => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid var(--border)';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.onchange = () => { coches[e.id] = cb.checked; majBtn(); };
+    const nom = document.createElement('span');
+    nom.style.cssText = 'flex:1;font-size:13px';
+    nom.innerHTML = '<b>' + escapeHtml(e.n) + '</b> <span style="color:var(--text-3);font-size:12px">· ' +
+      workedDays(e.id) + ' j · ' + (Math.round(workedHours(e.id) * 10) / 10) + ' h</span>';
+    const b = document.createElement('button');
+    b.className = 'btn bg';
+    b.style.cssText = 'padding:3px 10px;font-size:12px';
+    b.textContent = '📄 PDF';
+    b.onclick = () => exportParEmploye([e.id]);
+    row.appendChild(cb); row.appendChild(nom); row.appendChild(b);
+    wrap.appendChild(row);
+  });
+  box.appendChild(wrap);
+
+  const foot = document.createElement('div');
+  foot.className = 'modal-foot';
+  foot.appendChild(mBtn('Fermer', false, closeModal));
+  const tous = mBtn('Tout le monde', false, () => exportParEmploye(liste.map(e => e.id)));
+  foot.appendChild(tous);
+  const sel = mBtn('Sélection', true, () => {
+    const ids = liste.filter(e => coches[e.id]).map(e => e.id);
+    if (ids.length) exportParEmploye(ids);
+  });
+  foot.appendChild(sel);
+  box.appendChild(foot);
+  function majBtn() {
+    const n = liste.filter(e => coches[e.id]).length;
+    sel.textContent = n ? 'Sélection (' + n + ')' : 'Sélection';
+    sel.disabled = !n;
+  }
+  majBtn();
+}
+
+function exportParEmploye(ids) {
   const D = dim(S.y, S.m);
   const pages = [];
+  const cibles = ids && ids.length
+    ? S.emps.filter(e => ids.indexOf(e.id) >= 0)
+    : S.emps.filter(e => !e.inactif);
 
-  S.emps.forEach(e => {
+  cibles.forEach(e => {
     const jours = [];
     for (let d = 1; d <= D; d++) {
       const w = dow(S.y, S.m, d);
@@ -14151,7 +14210,8 @@ function exportParEmploye() {
     h.push('</div>');
     h.push(
       "<div class='info'>Planning " + MN[S.m] + ' ' + S.y +
-      '<br>Contrat : ' + contratHNow(e) + 'h/mois' +
+      '<br>' + pg.wj + ' jour' + (pg.wj > 1 ? 's' : '') + ' · ' +
+      (Math.round(pg.hw * 10) / 10).toString().replace('.', ',') + ' h prévues' +
       (e.tel ? '<br>📞 ' + e.tel : '') + '</div>'
     );
     h.push('</div>');
@@ -14177,9 +14237,11 @@ function exportParEmploye() {
       } else if (j.ind) {
         h.push("<div class='ind'>Indispo</div>");
       } else if (j.poste) {
+        const hor = postH(j.posteCode) >= 7 ? '9h – 16h30' : '12h – 16h30';
         h.push(
           "<div class='post' style='background:" + j.posteBg +
-          ";color:#1f2937'>" + j.poste + '</div>'
+          ";color:#1f2937'>" + j.poste + '</div>' +
+          "<div style='font-size:9px;color:#6b7280;margin-top:2px'>" + hor + '</div>'
         );
       }
       if (j.note) {
