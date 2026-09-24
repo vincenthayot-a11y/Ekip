@@ -9753,6 +9753,7 @@ function rModal() {
   else if (type === 'config')           mConfig(box);
   else if (type === 'export')           mExport(box);
   else if (type === 'importCA')         mImportCA(box);
+  else if (type === 'importPlanning')   mImportPlanning(box);
   else if (type === 'annuel')           mAnnuel(box);
   else if (type === 'stats')            mStats(box);
   else if (type === 'rapLabor')         mRapLabor(box);
@@ -11603,6 +11604,7 @@ function rParametres() {
   dataGrid.className = 'params-data-grid';
   [
     { icon: '⬇', txt: 'Exporter le planning', fn: () => { S.modal = { type: 'export' }; render(); } },
+    { icon: '📅', txt: 'Importer un planning', fn: () => { S.modal = { type: 'importPlanning' }; render(); } },
     { icon: '📥', txt: 'Importer historique CA', fn: () => { S.modal = { type: 'importCA' }; render(); } },
     { icon: '🗂', txt: 'Exporter historique CA', fn: () => { exportCAHistoryJSON(); } }
   ].forEach(it => {
@@ -17907,6 +17909,98 @@ function pickCAFile() {
   document.body.appendChild(input);
   input.click();
   setTimeout(() => input.remove(), 1000);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   IMPORT D'UN PLANNING MENSUEL (fichier .json préparé hors de l'app)
+   ───────────────────────────────────────────────────────────────────────────
+   Format : { type: 'ekip-planning', month: 'AAAA-MM', pl: {jour: {poste: id}},
+              dc?: config des postes actifs du mois,
+              leverIndispo?: [[idSalarié, jour], …] }
+   Remplace le planning du mois indiqué (annulable via Ctrl+Z / Annuler),
+   applique la configuration des postes si fournie, et lève les
+   indisponibilités listées (placements manuels validés par le gérant).
+   ═══════════════════════════════════════════════════════════════════════════ */
+function mImportPlanning(box) {
+  mHdr(box, '📅 Importer un planning');
+  const intro = document.createElement('p');
+  intro.className = 'modal-lead';
+  intro.textContent = 'Choisis le fichier .json du planning. Le planning du mois concerné sera remplacé (annulable).';
+  box.appendChild(intro);
+
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+  box.appendChild(input);
+
+  const res = document.createElement('div');
+  res.style.cssText = 'margin-top:12px;font-size:13px;line-height:1.6';
+  box.appendChild(res);
+
+  const foot = document.createElement('div');
+  foot.className = 'modal-foot';
+  foot.appendChild(mBtn('Annuler', false, closeModal));
+  const okBtn = mBtn('Importer', true, () => {});
+  okBtn.disabled = true;
+  foot.appendChild(okBtn);
+  box.appendChild(foot);
+
+  let data = null;
+  input.onchange = () => {
+    const f = input.files && input.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        data = JSON.parse(r.result);
+        if (!data || data.type !== 'ekip-planning' || !/^\d{4}-\d{2}$/.test(data.month) || !data.pl)
+          throw new Error('format');
+        // Contrôle : tous les salariés et postes existent
+        const ids = {}; S.emps.forEach(e => { ids[e.id] = e.n; });
+        const postes = {}; AP.forEach(p => { postes[p.c] = true; });
+        let n = 0; const inconnus = [];
+        Object.keys(data.pl).forEach(d => Object.keys(data.pl[d] || {}).forEach(pc => {
+          const id = data.pl[d][pc];
+          if (id == null) return;
+          if (!postes[pc] || !ids[id]) inconnus.push('j' + d + ' ' + pc);
+          else n++;
+        }));
+        if (inconnus.length) throw new Error('Postes ou salariés inconnus : ' + inconnus.slice(0, 5).join(', '));
+        const [yy, mm] = data.month.split('-');
+        const deja = S.pl[data.month] && Object.keys(S.pl[data.month]).some(d =>
+          Object.values(S.pl[data.month][d] || {}).some(v => v != null));
+        res.innerHTML = '✓ <b>' + MN[parseInt(mm, 10) - 1] + ' ' + yy + '</b> — ' + n + ' affectations' +
+          (data.dc ? ', configuration des postes incluse' : '') +
+          ((data.leverIndispo || []).length ? ', ' + data.leverIndispo.length + ' indisponibilité(s) levée(s)' : '') +
+          (deja ? '<br><span style="color:#b45309">⚠ Le planning existant de ce mois sera remplacé.</span>' : '');
+        okBtn.disabled = false;
+      } catch (e) {
+        data = null; okBtn.disabled = true;
+        res.innerHTML = '<span style="color:#b91c1c">Fichier invalide' +
+          (e.message && e.message !== 'format' ? ' — ' + escapeHtml(e.message) : '') + '.</span>';
+      }
+    };
+    r.readAsText(f);
+  };
+
+  okBtn.onclick = () => {
+    if (!data) return;
+    pushUndo();
+    const k = data.month;
+    S.pl[k] = JSON.parse(JSON.stringify(data.pl));
+    if (data.dc) S.dc[k] = JSON.parse(JSON.stringify(data.dc));
+    (data.leverIndispo || []).forEach(([id, d]) => {
+      const a = S.ind[k] && S.ind[k][id];
+      if (a) { const i = a.indexOf(d); if (i >= 0) a.splice(i, 1); }
+    });
+    const [yy, mm] = k.split('-');
+    S.y = parseInt(yy, 10); S.m = parseInt(mm, 10) - 1;
+    S.view = 'month';
+    closeModal();
+    save();
+    render();
+    toast('Planning importé ✓', 'ok');
+  };
 }
 
 function mImportCA(box) {
