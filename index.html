@@ -8156,6 +8156,7 @@ function rHdr() {
   // sidebar et la vue Caisse). Imprimer reste accessible ici.
   const moreMenu = [
     { label: 'Planning', items: [
+      { icon: '📅', txt: 'Importer un planning', fn: () => { S.modal = { type: 'importPlanning' }; render(); } },
       { icon: '🗑️', txt: 'Effacer le mois', danger: true, fn: () => { S.modal = { type: 'clearMonth' }; render(); } },
       { icon: '🖨', txt: 'Imprimer', fn: () => { printPlanning(); } }
     ]}
