@@ -7224,67 +7224,102 @@ function autoGen(mode) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Génère une nouvelle fenêtre imprimable A4 paysage de la grille mensuelle. */
+/* Colonnes imprimées : tous les postes sauf la Plonge. */
+function colonnesImpression() {
+  return AP.filter(p => p.c !== 'PL');
+}
+
 function printPlanning() {
   const D = dim(S.y, S.m);
-  const activePosts = getActivePosts(1);
-  const cols = AP.filter(p => activePosts.indexOf(p.c) >= 0);
+  const JOURS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+  const cui = POSTES_CUISINE.map(p => p.c);
+  const colsCui = AP.filter(p => cui.indexOf(p.c) >= 0);
+  const colsSal = AP.filter(p => cui.indexOf(p.c) < 0 && p.c !== 'PL' && p.c !== 'EX');
+  const colEx = AP.filter(p => p.c === 'EX');
+  const rowH = Math.floor(186 / (D + 2) * 10) / 10;   // remplit l'A4 paysage
+  const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
-  // Taille de police auto : A4 paysage = ~277mm utiles
-  const nCols = cols.length + 1;
-  const fontSize = Math.max(4, Math.min(7, Math.floor(120 / nCols)));
-  const rowHeight = Math.max(4, Math.min(7, Math.floor(180 / D))) * 0.8;
+  const h = [];
+  h.push("<!DOCTYPE html><html><head><meta charset='utf-8'><title>Planning " +
+    MN[S.m] + ' ' + S.y + '</title><style>' +
+    '@page{size:A4 landscape;margin:7mm}' +
+    '*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    'body{font-family:Arial,Helvetica,sans-serif;margin:0;font-size:7.5pt;color:#111}' +
+    'table{border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed}' +
+    'td,th{height:' + rowH + 'mm;padding:0 1mm;text-align:center;vertical-align:middle;' +
+    'white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '.grp{font-weight:700;font-size:9pt;color:#1f3b73;border-bottom:0.5mm solid #1f3b73}' +
+    '.hd{font-size:6.5pt;font-weight:700;text-transform:uppercase;color:#333;' +
+    'border:0.25mm solid #555;background:#f3f4f6}' +
+    '.jn{width:6mm;text-align:right;font-size:7pt;border:0.25mm solid #999}' +
+    '.jj{width:15mm;text-align:left;font-size:6.5pt;color:#444;border:0.25mm solid #999;border-left:none}' +
+    '.di td.jn,.di td.jj{font-weight:700;color:#000}' +
+    '.on{border:0.25mm solid #555}' +
+    '.nom{font-weight:700}' +
+    '.gap{width:4mm;border:none}' +
+    '.ttl{font-size:9pt;font-weight:700;text-align:left;color:#1f3b73;overflow:visible}' +
+    '</style></head><body><table>');
 
-  const h = [
-    '<!DOCTYPE html><html><head><meta charset=\'utf-8\'>',
-    '<title>Planning ' + MN[S.m] + ' ' + S.y + '</title><style>',
-    '@page{size:A4 landscape;margin:10mm}',
-    'body{font-family:Arial,sans-serif;margin:0;font-size:' + fontSize + 'pt}',
-    'h1{font-size:' + (fontSize + 4) + 'pt;margin:0 0 4mm 0}',
-    'table{border-collapse:collapse;width:100%;table-layout:fixed}',
-    'th,td{border:0.3mm solid #000;padding:0.5mm;text-align:center;',
-    'height:' + rowHeight + 'mm;vertical-align:middle;overflow:hidden;',
-    'text-overflow:ellipsis;white-space:nowrap}',
-    'th{background:#f0f0f0;font-weight:bold}',
-    '.dc{width:8mm;font-weight:bold}',
-    '.we{background:#f5f5f5}',
-    '.tod{background:#dbeafe}',
-    '.closed{background:#e5e7eb;color:#9ca3af}',
-    '.ferie{background:#fef9c3}',
-    '</style></head><body>',
-    '<h1>Planning ' + MN[S.m] + ' ' + S.y + '</h1>',
-    '<table><thead><tr><th class="dc">J</th>'
-  ];
-  cols.forEach(p => {
-    h.push('<th style="background:' + p.hbg +
-           ';border-top:1mm solid ' + p.acc + '">' + p.l + '</th>');
-  });
-  h.push('</tr></thead><tbody>');
+  // Largeurs : jour (2 colonnes) + cuisine + espace + salle + espace + extra
+  h.push('<colgroup><col style="width:6mm"><col style="width:15mm">');
+  colsCui.forEach(() => h.push('<col>'));
+  h.push('<col style="width:4mm">');
+  colsSal.forEach(() => h.push('<col>'));
+  h.push('<col style="width:4mm">');
+  colEx.forEach(() => h.push('<col>'));
+  h.push('</colgroup>');
+
+  // Ligne 1 : titre du mois + blocs Cuisine / Salle
+  h.push('<tr><td colspan="2" class="ttl">' + MN[S.m] + ' ' + S.y + '</td>' +
+    '<td colspan="' + colsCui.length + '" class="grp">Cuisine</td><td class="gap"></td>' +
+    '<td colspan="' + colsSal.length + '" class="grp">Salle</td><td class="gap"></td>' +
+    '<td></td></tr>');
+  // Ligne 2 : noms des postes
+  h.push('<tr><th colspan="2" class="hd">Jour</th>');
+  colsCui.forEach(p => h.push('<th class="hd">' + esc(p.l) + '</th>'));
+  h.push('<td class="gap"></td>');
+  colsSal.forEach(p => h.push('<th class="hd">' + esc(p.l) + '</th>'));
+  h.push('<td class="gap"></td>');
+  colEx.forEach(p => h.push('<th class="hd">' + esc(p.l) + '</th>'));
+  h.push('</tr>');
+
+  // Couleur d'impression : teinte du salarié rendue plus franche
+  // (mélange de sa couleur de fond et de sa couleur de texte).
+  const hex = (c) => { c = c.replace('#', ''); return [0, 2, 4].map(i => parseInt(c.substr(i, 2), 16)); };
+  const franche = (c) => {
+    const a = hex(c.bg || '#f1f5f9'), b = hex(c.text || '#374151');
+    const m = a.map((v, i) => Math.round(v * 0.55 + b[i] * 0.45));
+    const lum = (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]);
+    return { bg: 'rgb(' + m.join(',') + ')', text: lum < 140 ? '#fff' : '#111' };
+  };
+  const cellule = (d, p, actifs) => {
+    const eid = getSlot(d, p.c);
+    if (eid !== null) {
+      const c = franche(eColor(eid));
+      return '<td class="on nom" style="background:' + c.bg + ';color:' + c.text +
+        '">' + esc(eName(eid)) + '</td>';
+    }
+    // Poste ouvert ce jour mais non pourvu : case encadrée vide ; sinon rien
+    return actifs.indexOf(p.c) >= 0 ? '<td class="on"></td>' : '<td></td>';
+  };
 
   for (let d = 1; d <= D; d++) {
-    const we = isWE(S.y, S.m, d);
-    const tod = isTod(S.y, S.m, d);
-    const closed = isClosed(d);
-    const ferie = isFerie(S.y, S.m, d);
-    let rowCls = '';
-    if (closed) rowCls = 'closed';
-    else if (tod) rowCls = 'tod';
-    else if (ferie) rowCls = 'ferie';
-    else if (we) rowCls = 'we';
-
-    h.push('<tr class="' + rowCls + '"><td class="dc">' +
-           d + ' ' + DN[dow(S.y, S.m, d)] + '</td>');
-    cols.forEach(p => {
-      const eid = getSlot(d, p.c);
-      h.push('<td style="background:' + (eid !== null ? eColor(eid).bg : '') +
-             '">' + (eid !== null ? eName(eid) : '') + '</td>');
-    });
+    const w = dow(S.y, S.m, d);
+    const actifs = isClosed(d) ? [] : getActivePosts(d);
+    h.push('<tr class="' + (w === 0 ? 'di' : '') + '"><td class="jn">' + d +
+      '</td><td class="jj">' + JOURS[w] + (isClosed(d) ? ' — fermé' : '') + '</td>');
+    colsCui.forEach(p => h.push(cellule(d, p, actifs)));
+    h.push('<td class="gap"></td>');
+    colsSal.forEach(p => h.push(cellule(d, p, actifs)));
+    h.push('<td class="gap"></td>');
+    colEx.forEach(p => h.push(cellule(d, p, actifs)));
     h.push('</tr>');
   }
-  h.push('</tbody></table>');
+  h.push('</table>');
   h.push('<scr' + 'ipt>window.onload=function(){window.print();};<' +
          '/scr' + 'ipt></body></html>');
 
-  const win = window.open('', '_blank', 'width=960,height=700');
+  const win = window.open('', '_blank', 'width=1100,height=780');
   if (!win) { alert('Autorisez les popups.'); return; }
   win.document.write(h.join(''));
   win.document.close();
@@ -14294,8 +14329,7 @@ function exportPdf() {
           orientation: 'landscape', unit: 'mm', format: 'a4'
         });
         const D = dim(S.y, S.m);
-        const activePosts = getActivePosts(1);
-        const cols = AP.filter(p => activePosts.indexOf(p.c) >= 0);
+        const cols = colonnesImpression();
 
         doc.setFontSize(11);
         doc.setFont(undefined, 'bold');
