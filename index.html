@@ -5465,7 +5465,10 @@ function dayHasDaily(year, month, day) {
    COÛT DE MAIN-D'ŒUVRE D'UNE JOURNÉE
    ───────────────────────────────────────────────────────────────────────────
    Pour chaque salarié présent ce jour :
-   - CONTRAT  : quote-part du salaire mensuel = salaire ÷ jours travaillés du mois
+   - CONTRAT  : salaire mensuel ÷ jours d'ouverture du mois, pour TOUS les
+                salariés sous contrat (présents ou non : ils sont payés)
+                + heures sup (au-delà du contrat) × taux HS, le jour où elles
+                sont faites
    - EXTRA    : heures réelles (ou estimées) × taux horaire
    Le coefficient de charges s'applique au total. Retourne { cout, complet }.
    "complet" = true si tous les présents ont une rémunération définie.
@@ -5500,25 +5503,13 @@ function dayLaborCost(year, month, day) {
     heures += h;
 
     if (e.t === 'extra') {
-      // Extra : payé à l'heure
+      // Extra : payé à l'heure, seulement les jours où il travaille
       const taux = (e.taux != null && e.taux !== '') ? e.taux : null;
       if (taux == null) complet = false;
       else cout += h * taux;
-    } else {
-      // Contrat : si des heures réelles sont saisies ce jour, on facture
-      // au taux horaire effectif (salaire mensuel ÷ heures contrat). Sinon,
-      // quote-part du salaire mensuel répartie sur les jours travaillés.
-      const sal = (e.salaire != null && e.salaire !== '') ? e.salaire : null;
-      if (sal == null) {
-        complet = false;
-      } else if (r && r.total != null && contratH(e, year, month)) {
-        const tauxEff = sal / contratH(e, year, month);          // €/heure déduit du contrat
-        cout += h * tauxEff;
-      } else {
-        const nbJours = empWorkDaysInMonth(year, month, eid);
-        if (nbJours > 0) cout += sal / nbJours;
-      }
     }
+    // Contrat : compté plus bas pour TOUS les salariés du mois (payés
+    // qu'ils soient présents ou non)
 
     // Prime couvert : quote-part répartie sur les jours travaillés du mois
     if ((e.primeCouv || 'aucune') !== 'aucune') {
@@ -5530,11 +5521,80 @@ function dayLaborCost(year, month, day) {
     }
   });
 
+  // Salariés sous contrat : le salaire mensuel est une charge fixe, due
+  // qu'ils soient présents ou non. Il est réparti sur les jours d'ouverture
+  // du mois (un jour fermé ne porte aucune part de salaire).
+  const fermes = S.closed[k] || [];
+  if (fermes.indexOf(day) < 0) {
+    const joursOuverts = dim(year, month) - fermes.length;
+    S.emps.forEach(e => {
+      if (e.t === 'extra' || !empSousContratMois(e, year, month)) return;
+      const sal = (e.salaire != null && e.salaire !== '') ? e.salaire : null;
+      if (sal == null) { complet = false; return; }
+      if (joursOuverts > 0) cout += sal / joursOuverts;
+    });
+  }
+
+  // Heures supplémentaires : chaque heure au-delà du contrat (congés
+  // déduits) coûte en plus, le jour où elle est faite.
+  ids.forEach(eid => {
+    const e = findEmp(eid);
+    if (!e || e.t === 'extra') return;
+    const hsJ = empHSJour(year, month, day, e);
+    if (hsJ <= 0) return;
+    const t = tauxHSEmp(e, year, month);
+    if (t == null) complet = false;
+    else cout += hsJ * t;
+  });
+
   const coef = (typeof _chargesCoef === 'number' && _chargesCoef > 0)
     ? _chargesCoef : 1.0;
   cout = cout * coef;
 
   return { cout: cout, heures: heures, complet: complet, nbPresents: ids.length };
+}
+
+/* Heures sup faites CE jour : on cumule les heures réelles du mois jour
+   après jour ; ce qui dépasse le contrat du mois (congés déduits) est de
+   l'heure sup, affectée au jour où le dépassement a lieu. */
+function empHSJour(year, month, day, e) {
+  const contrat = contratAjuste(e, year, month);
+  if (!contrat) return 0;
+  const k = year + '-' + String(month + 1).padStart(2, '0');
+  const mr = S.real[k] || {};
+  let avant = 0;
+  for (let d = 1; d < day; d++) {
+    const r = (mr[String(d)] || {})[String(e.id)];
+    if (r && r.total != null) avant += r.total / 60;
+  }
+  const rj = (mr[String(day)] || {})[String(e.id)];
+  const hj = (rj && rj.total != null) ? rj.total / 60 : 0;
+  return Math.max(0, avant + hj - Math.max(contrat, avant));
+}
+
+/* Coût d'une heure sup : taux HS de la fiche, sinon taux horaire du contrat
+   majoré de 25 %. null si ni l'un ni l'autre n'est connu. */
+function tauxHSEmp(e, year, month) {
+  if (e.tauxHS != null && e.tauxHS !== '') return e.tauxHS;
+  const sal = (e.salaire != null && e.salaire !== '') ? e.salaire : null;
+  const h = contratH(e, year, month);
+  return (sal != null && h) ? (sal / h) * 1.25 : null;
+}
+
+/* Un salarié sous contrat est-il salarié de l'entreprise ce mois-là ?
+   Oui s'il a laissé une trace dans le mois : planning, heures, CA serveur,
+   congés ou maladie. Évite de compter un salarié avant son embauche ou après son
+   départ. */
+function empSousContratMois(e, year, month) {
+  const k = year + '-' + String(month + 1).padStart(2, '0');
+  const id = e.id;
+  const aTrace =
+    Object.values(S.pl[k] || {}).some(j => Object.values(j || {}).indexOf(id) >= 0) ||
+    Object.values(S.real[k] || {}).some(j => j && j[id] && j[id].total > 0) ||
+    Object.values(S.daily[k] || {}).some(j => j && j.serveurs && j.serveurs[id]) ||
+    ((S.cp[k] || {})[id] || []).length > 0 ||
+    ((S.mal[k] || {})[id] || []).length > 0;
+  return aTrace;
 }
 
 /* Nombre de jours où un salarié est planifié dans le mois (pour répartir
