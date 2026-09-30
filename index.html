@@ -4302,7 +4302,8 @@ const RL = { mj30: 20, mj31: 21, mjc: 5, hpj: 7 };
    ───────────────────────────────────────────────────────────────────────────
    • Postes "service complet"      : 9h00 – 16h30 → 7,5 h
      Chaud, Découpage, Crudités, Dessert, Aide, Ouverture, Ouverture 2
-   • Postes "service partiel/midi" : 12h00 – 16h30 → 4,5 h
+   • Postes "service de midi" (Salle 3 à 7, Extra) : 11h45 – 16h45 → 5 h
+     (moyenne des heures réelles de juin 2026) ; Plonge : 12h00 – 16h30 → 4,5 h
      Salle 3 à 7, Plonge, Extra
    ─────────────────────────────────────────────────────────────────────────── */
 const PH = {
@@ -4313,13 +4314,13 @@ const PH = {
   AI: { s: '09:00', e: '16:30', h: 7.5 },
   S1: { s: '09:00', e: '16:30', h: 7.5 },
   S2: { s: '09:00', e: '16:30', h: 7.5 },
-  S3: { s: '12:00', e: '16:30', h: 4.5 },
-  S4: { s: '12:00', e: '16:30', h: 4.5 },
-  S5: { s: '12:00', e: '16:30', h: 4.5 },
-  S6: { s: '12:00', e: '16:30', h: 4.5 },
-  S7: { s: '12:00', e: '16:30', h: 4.5 },
+  S3: { s: '11:45', e: '16:45', h: 5 },
+  S4: { s: '11:45', e: '16:45', h: 5 },
+  S5: { s: '11:45', e: '16:45', h: 5 },
+  S6: { s: '11:45', e: '16:45', h: 5 },
+  S7: { s: '11:45', e: '16:45', h: 5 },
   PL: { s: '12:00', e: '16:30', h: 4.5 },
-  EX: { s: '12:00', e: '16:30', h: 4.5 }
+  EX: { s: '11:45', e: '16:45', h: 5 }
 };
 
 function postH(postCode) {
@@ -5776,17 +5777,31 @@ function estPlongeur(e) {
 
 /* Nombre de personnes en salle présentes un jour donné, pour répartir la
    prime couvert du dimanche.
-   Règle : toutes les personnes qui ont travaillé EN SALLE ce jour (heures
-   réelles + section réelle = salle), SAUF la plonge, Doro et Vincent.
+   Règle : toutes les personnes présentes EN SALLE ce jour (heures saisies ou
+   CA/couverts déclarés, section réelle = salle), qu'elles touchent la prime
+   ou non, SAUF la plonge, Doro et Vincent.
    La section réelle tient compte des polyvalents basculés cuisine/salle. */
+/* Présent en salle un jour donné : heures réelles saisies OU CA / couverts
+   déclarés dans la saisie du jour (un serveur dont on a oublié les heures
+   compte quand même). La section réelle doit être « salle ». */
+function presentEnSalle(year, month, day, empId) {
+  const r = getReal(year, month, day, empId);
+  const aDesHeures = !!(r && r.total != null && r.total > 0);
+  const dd = getDaily(year, month, day);
+  const sv = dd && dd.serveurs ? dd.serveurs[empId] : null;
+  const aDeclare = !!(sv && ((sv.ca || 0) > 0 || (sv.couv || 0) > 0));
+  if (!aDesHeures && !aDeclare) return false;
+  return realSect(year, month, day, empId) === 'salle';
+}
+
 function nbServeursEligibles(year, month, day) {
   let n = 0;
   S.emps.forEach(e => {
     if (PRIME_EXCLUS_IDS.indexOf(e.id) >= 0) return; // Doro, Vincent exclus
     if (estPlongeur(e)) return;                      // plonge exclue
-    const r = getReal(year, month, day, e.id);
-    if (!r || r.total == null || r.total <= 0) return; // présence = heures
-    if (realSect(year, month, day, e.id) !== 'salle') return; // section réelle
+    // Présence : heures saisies ou CA/couverts déclarés, en salle.
+    // Les salariés sans droit à la prime (ex. Théo) comptent dans le partage.
+    if (!presentEnSalle(year, month, day, e.id)) return;
     n++;
   });
   return n;
@@ -5816,12 +5831,9 @@ function couvertsPrimeJour(year, month, day, empId) {
   const dd = getDaily(year, month, day);
   if (!dd) return 0;
   if (partageCouvActif(year, month, day)) {
-    // Le serveur doit être présent ce jour (heures réelles saisies)
-    const r = getReal(year, month, day, empId);
-    if (!r || r.total == null || r.total <= 0) return 0;
-    // …et avoir réellement travaillé EN SALLE ce jour-là : un polyvalent
-    // basculé en cuisine ne touche pas la prime (il sort aussi du diviseur).
-    if (realSect(year, month, day, empId) !== 'salle') return 0;
+    // Le serveur doit être présent en salle ce jour (heures ou CA déclaré) :
+    // un polyvalent basculé en cuisine ne touche pas la prime.
+    if (!presentEnSalle(year, month, day, empId)) return 0;
     if (estPlongeur(e)) return 0;
     const totCouv = dd.couv || 0;
     const nbElig = nbServeursEligibles(year, month, day);
@@ -14340,7 +14352,7 @@ function exportParEmploye(ids) {
       } else if (j.ind) {
         h.push("<div class='ind'>Indispo</div>");
       } else if (j.poste) {
-        const hor = postH(j.posteCode) >= 7 ? '9h – 16h30' : '12h – 16h30';
+        const hor = postH(j.posteCode) >= 7 ? '9h – 16h30' : (j.posteCode === 'PL' ? '12h – 16h30' : '11h45 – 16h45');
         h.push(
           "<div class='post' style='background:" + j.posteBg +
           ";color:#1f2937'>" + j.poste + '</div>' +
