@@ -5065,8 +5065,11 @@ function uncovered() {
 }
 
 function closeModal() {
+  // Une fenêtre ouverte par-dessus un rapport (ex. détail de la prime) se
+  // ferme en laissant le rapport affiché. Sans fenêtre ouverte, « Fermer »
+  // dans un rapport ramène à la liste des rapports.
+  if (S.modal) { S.modal = null; render(); return; }
   if (S.view === 'rapport') { S.view = 'rapports'; S.rapType = null; }
-  S.modal = null;
   render();
 }
 
@@ -10282,8 +10285,11 @@ function mConfirm(box) {
   foot.appendChild(mBtn('Annuler', false, closeModal));
 
   const okBtn = mBtn(S.modal.confirmLabel || 'Confirmer', true, () => {
-    if (S.modal.onOk) S.modal.onOk();
-    closeModal();
+    const m = S.modal;
+    if (m && m.onOk) m.onOk();
+    // Ne ferme que si l'action n'a pas déjà fermé/remplacé la fenêtre
+    // (évite une double fermeture qui ferait quitter un rapport).
+    if (S.modal === m) closeModal();
   });
   if (S.modal.danger) okBtn.classList.add('btn-danger-bg');
   foot.appendChild(okBtn);
@@ -17132,7 +17138,7 @@ function showPrimeDetail(empId, nom) {
     title: 'Prime couvert — ' + nom,
     msg: html,
     confirmLabel: 'Fermer',
-    onOk: closeModal
+    onOk: null   // « Fermer » referme simplement le détail
   };
   render();
 }
