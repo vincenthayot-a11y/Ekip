@@ -3092,6 +3092,8 @@ input[type=number] {
   display: flex;
   justify-content: flex-end;
   margin-bottom: 14px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .emps-scroll--page {
   max-height: none;
@@ -4371,17 +4373,7 @@ const ECOLS = [
    salarié, qui ne correspond pas forcément aux grilles standards (169/152/
    130/104/86h). Clé = employé.id, valeur = heures/mois contractuelles.
    ─────────────────────────────────────────────────────────────────────────── */
-const CONTRAT_H = {
-  1:  151.67,  // JULIE
-  2:  151.67,  // Patricia
-  4:  121,     // Clarisse
-  5:  70,      // Monique
-  9:  151.67,  // Agnès
-  13: 50,      // M. ANGE
-  14: 120,     // Juliette
-  19: 100,     // CAROLE
-  20: 140      // Jessica
-};
+const CONTRAT_H = {};   // plus aucune donnée en dur : contrats saisis dans 👥 Employés
 
 /* ═══════════════════════════════════════════════════════════════════════════
    LISTE INITIALE DES EMPLOYÉS (EMPLOYEES_INIT)
@@ -4409,105 +4401,8 @@ const CONTRAT_H = {
      fixed         affectations fixes : [{dow, pc}] → tel poste tel jour de sem.
      noAutoGen     1 = exclu de l'auto-génération (placement 100% manuel)
    ─────────────────────────────────────────────────────────────────────────── */
-const EMPLOYEES_INIT = [
+const EMPLOYEES_INIT = [];   // plus aucune donnée en dur : salariés chargés depuis Drive ou créés dans 👥 Employés
 
-  /* --- CUISINE --- */
-
-  { id: 1, n: 'JULIE', s: 'cuisine', t: 'contrat', h: 169, jt: 'all',
-    r: ['CH', 'DC', 'CR', 'DS', 'AI'], col: 'pink' },
-
-  // Patricia : contrainte physique — pas plus de 4 jours d'affilée
-  // (au lieu du maximum légal de 5 imposé par RL.mjc).
-  { id: 2, n: 'Patricia', s: 'cuisine', t: 'contrat', h: 169, jt: 'all',
-    r: ['CH', 'DC', 'CR', 'DS', 'AI'], col: 'violet', maxConsec: 4 },
-
-  // Clarisse : temps partiel volontaire — max 4 jours par semaine.
-  // Elle n'est pas formée au poste "Chaud".
-  { id: 4, n: 'Clarisse', s: 'cuisine', t: 'contrat', h: 169, jt: 'all',
-    r: ['DC', 'CR', 'DS', 'AI'], col: 'blue', maxDPW: 4 },
-
-  // Monique : règles spécifiques sur le Chaud —
-  //   • jamais le dimanche (chNoDow:[0]) : rythme trop intense pour ce jour
-  //   • maximum 1 fois par semaine (chMaxPW:1)
-  //   • ne travaille pas le jeudi (dow=4)
-  { id: 5, n: 'Monique', s: 'cuisine', t: 'contrat', h: 130,
-    jt: 'custom', jours: [0, 1, 2, 3, 5, 6],
-    r: ['CH', 'DC', 'CR', 'DS', 'AI'], col: 'orange',
-    chMaxPW: 1, chNoDow: [0] },
-
-  // FLORITA : non formée Chaud.
-  { id: 6, n: 'FLORITA', s: 'cuisine', t: 'contrat', h: 104, jt: 'all',
-    r: ['DC', 'CR', 'DS', 'AI'], col: 'green' },
-
-  // MANUEL : extra, disponible uniquement dimanche (0) et lundi (1).
-  { id: 8, n: 'MANUEL', s: 'cuisine', t: 'extra', h: 104, jt: 'custom',
-    jours: [0, 1], r: ['DC', 'CR', 'DS', 'AI'], col: 'sky' },
-
-  /* --- SALLE (certains polyvalents cuisine) --- */
-
-  // Agnès : polyvalente cuisine/salle (ec:1). Pas de Chaud le dimanche
-  // (chNoDow:[0]) — service dimanche trop tendu pour ce poste.
-  // Le samedi reste autorisé en renfort pour soulager Julie/Patricia.
-  { id: 9, n: 'Agnes', s: 'salle', t: 'contrat', h: 169, jt: 'all', ec: 1,
-    r: ['CH', 'DC', 'CR', 'DS', 'AI'], col: 'amber', chNoDow: [0] },
-
-  // Natacha : extra week-ends. Affectation fixe : dimanche → S1 (Ouverture).
-  // Cette règle est renforcée par un bloc dédié dans autoGen().
-  { id: 11, n: 'Natacha', s: 'salle', t: 'extra', h: 104, jt: 'weekends',
-    fixed: [{ dow: 0, pc: 'S1' }], col: 'indigo', cpTotal: 25 },
-
-  { id: 12, n: 'FLORIANE', s: 'salle', t: 'extra', h: 169, jt: 'weekends',
-    col: 'rose', cpTotal: 25 },
-
-  { id: 13, n: 'M. ANGE', s: 'salle', t: 'contrat', h: 169, jt: 'all',
-    col: 'emerald', cpTotal: 25 },
-
-  { id: 14, n: 'Juliette', s: 'salle', t: 'contrat', h: 169, jt: 'all',
-    pmDow: [0],
-    col: 'cyan', cpTotal: 25 },
-
-  { id: 15, n: 'Mickaelle', s: 'salle', t: 'extra', h: 130, jt: 'all',
-    col: 'fuchsia', cpTotal: 25 },
-
-  { id: 16, n: 'Carine', s: 'salle', t: 'contrat', h: 104, jt: 'weekends',
-    col: 'coral', cpTotal: 25 },
-
-  // Albertine : plongeuse attitrée (rs:["PL"]). Affectation fixe dimanche
-  // → PL (Plonge). Restriction explicite : elle ne travaille QUE sur PL.
-  { id: 17, n: 'Albertine', s: 'salle', t: 'contrat', h: 104, jt: 'weekends',
-    rs: ['PL'], col: 'red', fixed: [{ dow: 0, pc: 'PL' }], cpTotal: 25 },
-
-  // DORO : salle, contrat 169h, semaine uniquement.
-  { id: 18, n: 'DORO', s: 'salle', t: 'contrat', h: 169, jt: 'weekdays',
-    col: 'gray', cpTotal: 25 },
-
-  { id: 19, n: 'CAROLE', s: 'salle', t: 'contrat', h: 169, jt: 'all',
-    col: 'lavender', cpTotal: 25 },
-
-  // Jessica : moins prioritaire sur S1 (Ouverture). Elle est affectée
-  // ailleurs en priorité, ne prend S1 qu'en dernier recours.
-  { id: 20, n: 'Jessica', s: 'salle', t: 'contrat', h: 130, jt: 'all',
-    lowPrioPost: ['S1'], col: 'yellow', cpTotal: 25 },
-
-  { id: 22, n: 'MELODIE', s: 'salle', t: 'contrat', h: 104, jt: 'all',
-    col: 'peach', cpTotal: 25 },
-
-  { id: 23, n: 'THEO', s: 'salle', t: 'contrat', h: 169, jt: 'all',
-    col: 'mint', cpTotal: 25 },
-
-  // HELANA : salle polyvalente cuisine (ec:1), extra.
-  { id: 24, n: 'HELANA', s: 'salle', t: 'extra', h: 104, jt: 'all', ec: 1,
-    r: ['DC', 'CR', 'DS', 'AI'], col: 'brown', cpTotal: 25 },
-
-  // VINCENT : extra week-end. Bouche-trou : ne participe PAS à la génération
-  // principale, mais l'algo peut l'utiliser en dernier recours pour combler
-  // un poste essentiel resté vide en phase 5.
-  { id: 25, n: 'VINCENT', s: 'salle', t: 'extra', h: 104, jt: 'all',
-    noAutoGen: 1, ec: 1, r: ['DC','CR','DS','AI'],
-    col: 'slate', cpTotal: 25 }
-];
-
-/* Alias court conservé pour compatibilité */
 const E0 = EMPLOYEES_INIT;
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -5484,6 +5379,45 @@ function caReelJour(year, month, day) {
   return has ? tot : null;
 }
 
+/* Totaux calculés d'une journée, à partir de ce qui est saisi :
+   - CA   = total Réel encaissé (mêmes exclusions que les écarts) ;
+            à défaut de Réel, somme du CA déclaré par les serveurs.
+   - Couv = somme des couverts des serveurs.
+   Appelé à chaque enregistrement (saisie manuelle ou import). */
+function recalcDailyTotals(dd) {
+  if (!dd) return dd;
+  let caR = 0, hasR = false;
+  Object.keys(dd.reel || {}).forEach(k => {
+    if (!modeCompteDansEcart(k)) return;
+    if (dd.reel[k]) { caR += dd.reel[k]; hasR = true; }
+  });
+  let caS = 0, cvS = 0, hasS = false, hasC = false;
+  Object.keys(dd.serveurs || {}).forEach(id => {
+    const x = dd.serveurs[id] || {};
+    if (x.ca != null) { caS += x.ca; hasS = true; }
+    if (x.couv != null) { cvS += x.couv; hasC = true; }
+  });
+  dd.ca = hasR ? Math.round(caR * 100) / 100 : (hasS ? caS : null);
+  dd.couv = hasC ? cvS : null;
+  return dd;
+}
+
+/* Recalcule CA et couverts de tous les jours à partir de ce qui est saisi
+   (total Réel, serveurs). Appelé au chargement, local comme Drive. */
+function recalcAllDaily() {
+  Object.keys(S.daily || {}).forEach(mk => {
+    Object.keys(S.daily[mk] || {}).forEach(d => {
+      const dd = S.daily[mk][d];
+      if (dd && (dd.reel || dd.serveurs)) {
+        const avant = dd.ca, avantCv = dd.couv;
+        recalcDailyTotals(dd);
+        if (dd.ca == null && avant != null) dd.ca = avant;
+        if (dd.couv == null && avantCv != null) dd.couv = avantCv;
+      }
+    });
+  });
+}
+
 /* Écart de caisse d'un jour : (CA réel − CA déclaré serveurs)
    + (fond jour − fond veille). « À encaisser » exclu du CA réel.
    Retourne null si aucune donnée exploitable. */
@@ -6113,7 +6047,7 @@ const SURPLUS_MAX = 0.20;
      • polyvalent : écart cuisine/salle ....... 3 / jour
      • poste « à éviter » (Jessica en Ouv.) ... 2
    ═══════════════════════════════════════════════════════════════════════════ */
-const APP_VERSION = '24 sept. 2026 — import planning';
+const APP_VERSION = '30 sept. 2026 — import historique CA';
 
 function optimiserPlanning(ctx) {
   const D = dim(S.y, S.m);
@@ -7830,7 +7764,7 @@ function load() {
           if (d2.notes)  S.notes  = d2.notes;
           if (d2.dc)     S.dc     = d2.dc;
           if (d2.real)   S.real   = d2.real;
-          if (d2.daily)  S.daily  = d2.daily;
+          if (d2.daily)  { S.daily = d2.daily; recalcAllDaily(); }
           if (d2.closed) S.closed = d2.closed;
           if (d2.emps && d2.emps[0] && d2.emps[0].col) {
             S.emps = d2.emps;
@@ -10323,6 +10257,14 @@ function rEmps() {
   });
   addBtn.classList.add('emps-add-btn');
   bar.appendChild(addBtn);
+  // Salariés partis : masqués par défaut, affichables d'un clic
+  const nbPartis = S.emps.filter(e => e.inactif).length;
+  if (nbPartis) {
+    const partisBtn = mBtn(
+      (S.showPartis ? 'Masquer' : 'Afficher') + ' les salariés partis (' + nbPartis + ')',
+      false, () => { S.showPartis = !S.showPartis; render(); });
+    bar.appendChild(partisBtn);
+  }
   outer.appendChild(bar);
 
   outer.appendChild(buildEmpsSections());
@@ -10338,7 +10280,8 @@ function buildEmpsSections() {
   ['cuisine', 'salle'].forEach(section => {
     // Vue Équipe : on affiche tout le monde, y compris les salariés partis
     // (badge « Parti »), mais en fin de liste.
-    const sectionEmps = S.emps.filter(e => e.s === section)
+    const sectionEmps = S.emps.filter(e => e.s === section &&
+        (S.showPartis || !e.inactif))
       .slice()
       .sort((a, b) => (a.inactif ? 1 : 0) - (b.inactif ? 1 : 0));
 
@@ -15961,6 +15904,7 @@ function saveSaisieForm(box, d) {
   const obsEl = document.getElementById('saisie_obs');
   dd.obs = obsEl ? obsEl.value : '';
 
+  recalcDailyTotals(dd);
   setDaily(S.y, S.m, d, dd);
 
   // Heures réelles : lues depuis les champs texte libres (parsées en minutes).
@@ -17899,9 +17843,33 @@ function parseCAImportJSON(text) {
         const n = typeof v === 'number'
           ? v
           : parseFloat(String(v).replace(/\s/g, '').replace(',', '.'));
-        if (!isNaN(n) && n > 0) h[eid] = n;
+        if (v && typeof v === 'object') h[eid] = v;
+        else if (!isNaN(n) && n > 0) h[eid] = n;
       });
       if (Object.keys(h).length) o.heures = h;
+    }
+    // CA + couverts par serveur : { "<id ou nom>": { ca, couv } }
+    if (rec.serveurs && typeof rec.serveurs === 'object') {
+      const sv = {};
+      Object.keys(rec.serveurs).forEach(k => {
+        const x = rec.serveurs[k] || {};
+        if (typeof x.ca === 'number' || typeof x.couv === 'number') {
+          sv[k] = { ca: typeof x.ca === 'number' ? x.ca : null,
+                    couv: typeof x.couv === 'number' ? x.couv : null };
+        }
+      });
+      if (Object.keys(sv).length) o.serveurs = sv;
+    }
+    ['fdcVeille', 'fdcJour'].forEach(k => {
+      if (typeof rec[k] === 'number') o[k] = rec[k];
+    });
+    if (typeof rec.obs === 'string' && rec.obs.trim()) o.obs = rec.obs.trim();
+    // CA/couverts de l'aperçu : calculés comme à l'enregistrement
+    delete o.ca; delete o.couv;
+    if (o.reel || o.serveurs) {
+      const t = recalcDailyTotals({ reel: o.reel, serveurs: o.serveurs });
+      if (t.ca != null) o.ca = t.ca;
+      if (t.couv != null) o.couv = t.couv;
     }
     if (Object.keys(o).length) {
       if (!out[mk]) out[mk] = {};
@@ -17974,8 +17942,76 @@ function analyzeImportCA(data) {
 }
 
 /* Effectue l'import non destructif puis sauvegarde (+ synchro Drive). */
+/* Résolution d'un nom du fichier importé vers un salarié de l'app.
+   Stricte (pas de rapprochement approximatif) : nom exact, sinon un nom
+   commence par l'autre (4 lettres min.) avec un seul candidat. */
+function importFindEmp(key) {
+  if (/^\d+$/.test(String(key))) return findEmp(parseInt(key, 10));
+  const k = normName(key);
+  if (!k) return null;
+  const exact = S.emps.filter(e => normName(e.n) === k);
+  if (exact.length) return exact[0];
+  if (k.length < 4) return null;
+  const pre = S.emps.filter(e => {
+    const n = normName(e.n);
+    return n.length >= 4 && (n.indexOf(k) === 0 || k.indexOf(n) === 0);
+  });
+  return pre.length === 1 ? pre[0] : null;
+}
+
+/* Liste des noms du fichier : rapprochés (nom différent) et inconnus.
+   Section devinée pour les inconnus : salle s'ils ont un CA serveur. */
+function importNamesReport(data) {
+  const mapped = {}, h = {};
+  Object.keys(data).forEach(mk => Object.keys(data[mk]).forEach(day => {
+    const rec = data[mk][day];
+    ['heures', 'serveurs'].forEach(blk => Object.keys(rec[blk] || {}).forEach(k => {
+      if (/^\d+$/.test(k)) return;
+      const e = importFindEmp(k);
+      if (e) { if (normName(e.n) !== normName(k)) mapped[k] = e.n; return; }
+      const c = h[k] || (h[k] = { cuisine: 0, salle: 0 });
+      const v = rec[blk][k];
+      if (blk === 'serveurs') c.salle += 1;
+      else if (v && typeof v === 'object') c[v.sect === 'salle' ? 'salle' : 'cuisine'] += v.total || 0;
+      else c.cuisine += v || 0;
+    }));
+  }));
+  // Section = celle où il a le plus d'heures ; « polyvalent » s'il a fait les deux
+  const unknown = {};
+  Object.keys(h).forEach(k => {
+    unknown[k] = h[k].salle > h[k].cuisine ? 'salle' : 'cuisine';
+    if (h[k].salle > 0 && h[k].cuisine > 0) unknown[k] += '+';
+  });
+  return { mapped: mapped, unknown: unknown };
+}
+
+/* Salarié absent de l'app : créé comme « parti de l'entreprise » pour que
+   son historique (heures, CA) soit conservé sans qu'il réapparaisse dans
+   le planning ni dans les saisies. */
+function importCreateEmp(name, section) {
+  const newId = Math.max.apply(null, [0].concat(S.emps.map(x => x.id))) + 1;
+  const nm = String(name).trim();
+  const e = {
+    id: newId, n: nm.charAt(0) + nm.slice(1).toLowerCase(),
+    s: section, t: 'extra', h: 0, jt: 'all', jours: [], r: [], rs: [],
+    ec: 0, col: 'gray', fixed: [], tel: '', email: '', cpTotal: 25,
+    inactif: 1, contrats: []
+  };
+  S.emps.push(e);
+  return e;
+}
+
 function doImportCA(data, force) {
   pushUndo();
+  // Crée d'abord les salariés absents (marqués partis)
+  const rep = importNamesReport(data);
+  const created = Object.keys(rep.unknown).map(k => {
+    const sec = rep.unknown[k];
+    const e = importCreateEmp(k, sec.replace('+', ''));
+    if (sec.slice(-1) === '+') e.ec = 1;          // polyvalent cuisine/salle
+    return e.n;
+  });
+  const matchEmp = importFindEmp;
   let added = 0, skipped = 0, hAdded = 0, hSkipped = 0;
   Object.keys(data).forEach(mk => {
     const src = data[mk];
@@ -18013,8 +18049,16 @@ function doImportCA(data, force) {
           } else {
             total = Math.round(val * 60);
           }
+          // Section travaillée ce jour : marqueur seulement si elle diffère
+          // de la section habituelle (même règle que setRealSect)
+          const empI = findEmp(eidN);
+          const sectJ = (val && typeof val === 'object' && val.sect &&
+            empI && val.sect !== empI.s) ? val.sect : null;
+          // Un salarié ajouté par l'import qui a travaillé dans les deux
+          // sections devient polyvalent
+          if (sectJ && empI && empI.inactif && !empI.ec) empI.ec = 1;
           setReal(yy, mm, dayN, eidN, {
-            arr: arr, dep: dep, total: total, note: ''
+            arr: arr, dep: dep, total: total, note: '', sect: sectJ
           });
           hAdded++;
 
@@ -18042,9 +18086,6 @@ function doImportCA(data, force) {
       }
       const base = cur || emptyDaily();
       const merged = Object.assign({}, base);
-      ['ca', 'caN1', 'couv', 'couvN1'].forEach(k => {
-        if (rec[k] !== undefined) merged[k] = rec[k];
-      });
       if (rec.reel) {
         merged.reel = Object.assign({}, base.reel || {}, rec.reel);
       }
@@ -18072,11 +18113,14 @@ function doImportCA(data, force) {
       if (rec.notesEnc) {
         merged.notesEnc = Object.assign({}, base.notesEnc || {}, rec.notesEnc);
       }
-      if (rec.ca !== undefined || rec.couv !== undefined ||
-          rec.reel || rec.clyo || rec.caN1 !== undefined ||
-          rec.couvN1 !== undefined || rec.serveurs ||
+      // Dépenses : même format que la saisie (liste détaillée)
+      if (merged.reel && merged.reel.depenses && !merged.depensesList) {
+        merged.depensesList = [{ montant: merged.reel.depenses, note: '', facture: false }];
+      }
+      if (rec.reel || rec.clyo || rec.serveurs ||
           rec.fdcVeille !== undefined || rec.fdcJour !== undefined ||
           rec.obs !== undefined) {
+        recalcDailyTotals(merged);          // CA/couverts calculés par l'app
         S.daily[mk][day] = merged;
         added++;
       }
@@ -18093,6 +18137,7 @@ function doImportCA(data, force) {
   const ign = [];
   if (skipped) ign.push(skipped + ' jour(s) déjà saisis');
   if (hSkipped) ign.push(hSkipped + ' pointage(s) déjà saisis');
+  if (created.length) ign.push(created.length + ' salarié(s) ajouté(s) comme partis');
   toast('Import terminé : ' + detail +
     (ign.length ? ' · ' + ign.join(', ') + ' ignoré(s)' : '') +
     ' · Ctrl+Z pour annuler', 'ok', 6000);
@@ -18386,6 +18431,30 @@ function mImportCA(box) {
     Math.round(a.totCa).toLocaleString('fr-FR') + ' €</b>.';
   box.appendChild(summary);
 
+  // Noms du fichier : rapprochements et salariés absents de l'app
+  const nr = importNamesReport(data);
+  const rapp = Object.keys(nr.mapped).sort();
+  const nouv = Object.keys(nr.unknown).sort();
+  if (rapp.length || nouv.length) {
+    const nm = document.createElement('div');
+    nm.style.cssText = 'font-size:13px;color:var(--text-2);margin:8px 0';
+    let h = '';
+    if (rapp.length) {
+      h += '<div><b>Noms rapprochés :</b> ' + rapp.map(k =>
+        escapeHtml(k) + ' → ' + escapeHtml(nr.mapped[k])).join(', ') + '</div>';
+    }
+    if (nouv.length) {
+      h += '<div style="margin-top:6px"><b>Absents de l’app, ajoutés comme ' +
+        'partis :</b> ' + nouv.map(k => escapeHtml(k) + ' (' +
+          nr.unknown[k].replace('+', ' + ' + (nr.unknown[k][0] === 's' ? 'cuisine' : 'salle')) +
+          ')').join(', ') +
+        '<br><span style="font-size:12px">Leurs heures et leur CA sont ' +
+        'conservés sur ce mois ; ils n’apparaissent pas dans le planning.</span></div>';
+    }
+    nm.innerHTML = h;
+    box.appendChild(nm);
+  }
+
   const foot = document.createElement('div');
   foot.style.display = 'flex';
   foot.style.gap = '8px';
@@ -18422,6 +18491,9 @@ function mImportCA(box) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 load();
+
+// CA / couverts de tous les jours recalculés depuis ce qui est saisi
+recalcAllDaily();
 
 // N'appliquer CONTRAT_H qu'au premier lancement (sinon on écraserait les
 // modifications de contrat faites par l'utilisateur via le modal employé)
