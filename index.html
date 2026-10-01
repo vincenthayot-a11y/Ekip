@@ -5502,8 +5502,9 @@ function dayLaborCost(year, month, day) {
     else h = RL.hpj;
     heures += h;
 
-    if (e.t === 'extra') {
-      // Extra : payé à l'heure, seulement les jours où il travaille
+    if (e.t === 'extra' || !enContratLe(e, year, month, day)) {
+      // Extra (ou salarié avant sa date d'entrée) : payé à l'heure,
+      // seulement les jours où il travaille
       const taux = (e.taux != null && e.taux !== '') ? e.taux : null;
       if (taux == null) complet = false;
       else cout += h * taux;
@@ -5529,6 +5530,7 @@ function dayLaborCost(year, month, day) {
     const joursOuverts = dim(year, month) - fermes.length;
     S.emps.forEach(e => {
       if (e.t === 'extra' || !empSousContratMois(e, year, month)) return;
+      if (!enContratLe(e, year, month, day)) return;   // pas encore embauché
       const sal = salaireMoisEmp(e, year, month);
       if (sal == null) { complet = false; return; }
       if (joursOuverts > 0) cout += sal / joursOuverts;
@@ -5541,7 +5543,7 @@ function dayLaborCost(year, month, day) {
   // rattrape les mois creux, il ne coûte rien de plus.
   ids.forEach(eid => {
     const e = findEmp(eid);
-    if (!e || e.t === 'extra') return;
+    if (!e || e.t === 'extra' || !enContratLe(e, year, month, day)) return;
     if ((contratH(e, year, month) || 0) > HS_SEUIL_CONTRAT) return;
     const hsAvant = empHSCumul(year, month, day - 1, e);
     const hsApres = empHSCumul(year, month, day, e);
@@ -5563,16 +5565,42 @@ function dayLaborCost(year, month, day) {
    les heures sup faites ce jour-là. */
 function empHSCumul(year, month, day, e) {
   if (day < 1) return 0;
-  const contrat = contratAjuste(e, year, month);
+  const contrat = contratAjuste(e, year, month) * partContratMois(e, year, month);
   if (!contrat) return 0;
   const k = year + '-' + String(month + 1).padStart(2, '0');
   const mr = S.real[k] || {};
   let cumul = 0;
   for (let d = 1; d <= day; d++) {
+    if (!enContratLe(e, year, month, d)) continue;   // avant l'entrée : extra
     const r = (mr[String(d)] || {})[String(e.id)];
     if (r && r.total != null) cumul += r.total / 60;
   }
   return Math.max(0, cumul - contrat);
+}
+
+/* Date d'entrée en contrat (fiche, AAAA-MM-JJ). Avant cette date, le
+   salarié est payé à l'heure comme un extra (heures × taux horaire). */
+function enContratLe(e, year, month, day) {
+  if (!e || e.t === 'extra') return false;
+  if (!e.entree) return true;
+  const ds = year + '-' + String(month + 1).padStart(2, '0') + '-' +
+    String(day).padStart(2, '0');
+  return ds >= e.entree;
+}
+
+/* Part du mois sous contrat : jours d'ouverture à partir de l'entrée ÷
+   jours d'ouverture du mois (1 = mois complet, 0 = pas encore embauché). */
+function partContratMois(e, year, month) {
+  if (!e || e.t === 'extra') return 0;
+  if (!e.entree) return 1;
+  const fermes = S.closed[year + '-' + String(month + 1).padStart(2, '0')] || [];
+  let tot = 0, sous = 0;
+  for (let d = 1; d <= dim(year, month); d++) {
+    if (fermes.indexOf(d) >= 0) continue;
+    tot++;
+    if (enContratLe(e, year, month, d)) sous++;
+  }
+  return tot ? sous / tot : 0;
 }
 
 /* Taux horaire brut d'un salarié. Contrat sans taux mais avec un ancien
@@ -5606,7 +5634,7 @@ function coutHeuresSup(e, year, month, hsDe, hsA) {
   if (e.tauxHS != null && e.tauxHS !== '') return (hsA - hsDe) * e.tauxHS;
   const base = tauxHoraireEmp(e, year, month);
   if (base == null) return null;
-  const palier = 0.10 * (contratH(e, year, month) || 0);
+  const palier = 0.10 * (contratH(e, year, month) || 0) * partContratMois(e, year, month);
   const h110 = Math.max(0, Math.min(hsA, palier) - Math.min(hsDe, palier));
   return base * (1.10 * h110 + 1.25 * (hsA - hsDe - h110));
 }
@@ -5616,6 +5644,7 @@ function coutHeuresSup(e, year, month, hsDe, hsA) {
    congés ou maladie. Évite de compter un salarié avant son embauche ou après son
    départ. */
 function empSousContratMois(e, year, month) {
+  if (partContratMois(e, year, month) === 0) return false;   // pas encore embauché
   const k = year + '-' + String(month + 1).padStart(2, '0');
   const id = e.id;
   const aTrace =
@@ -5766,11 +5795,10 @@ function empHeuresSup(year, month, empId) {
   if (!e || e.t === 'extra') {
     return { hs: 0, montant: 0, payableMensuel: false };
   }
-  const real = empRealHoursMonth(year, month, empId);
-  // Contrat réduit des congés payés : un salarié en CP n'a pas à faire
-  // ses heures sur les jours où il était absent.
+  // Contrat réduit des congés payés (un salarié en CP n'a pas à faire ses
+  // heures sur ses jours d'absence) et limité à la période après l'entrée.
   const contrat = contratAjuste(e, year, month);
-  const hs = Math.max(0, real - contrat);
+  const hs = empHSCumul(year, month, dim(year, month), e);
   // Au-delà du seuil : HS reportées en fin d'année → non payées mensuellement
   const payableMensuel = contrat <= HS_SEUIL_CONTRAT;
   return {
@@ -10855,10 +10883,15 @@ function mEditEmp(box) {
   tauxInput.id = 'emp-taux-input';
 
   const remuRow = document.createElement('div');
-  remuRow.className = type === 'extra' ? 'form-grid-1' : 'form-grid-2';
+  // Date d'entrée en contrat (avant : payé à l'heure comme un extra)
+  const entreeInput = makeInput(baseEmp.entree || '', '', 'date');
+  entreeInput.id = 'emp-entree-input';
+
+  remuRow.className = type === 'extra' ? 'form-grid-1' : 'form-grid-3';
   remuRow.appendChild(field('Taux horaire brut (€/h)', tauxInput));
   if (type !== 'extra') {
     remuRow.appendChild(field('Taux h. sup. (€/h) — facultatif', hsInput));
+    remuRow.appendChild(field('En contrat depuis le', entreeInput));
   }
   form.appendChild(remuRow);
 
@@ -10877,7 +10910,7 @@ function mEditEmp(box) {
     }), S.y, S.m);
     let txt = '➡ <b>Contrat</b> : salaire du mois = taux × heures de contrat du mois ' +
       '(avenants compris). Heures en plus : +10 % jusqu\'à 1/10 du contrat, +25 % au-delà, ' +
-      'sauf si un taux h. sup. est saisi.';
+      'sauf si un taux h. sup. est saisi. Avant la date d\'entrée : payé à l\'heure.';
     if (!isNaN(t) && h) {
       txt += '<br>Ce mois-ci : ' + fmtEur(t * h) + ' brut (' + h + ' h × ' + fmtEur(t) + ').';
     } else if (baseEmp.salaire != null && baseEmp.salaire !== '') {
@@ -11191,6 +11224,7 @@ function mEditEmp(box) {
     const newSalaire = (newTaux != null || type === 'extra') ? null
       : (baseEmp.salaire != null && baseEmp.salaire !== '' ? baseEmp.salaire : null);
     const newTauxHS = hsInput.value !== '' ? (parseFloat(hsInput.value) || 0) : null;
+    const newEntree = (type !== 'extra' && entreeInput.value) ? entreeInput.value : null;
     const newPrimeCouv = primeSel.value || 'aucune';
 
     // Polyvalence : récupère l'état réel de la checkbox dans le DOM
@@ -11224,7 +11258,7 @@ function mEditEmp(box) {
         ec: newEc ? 1 : 0, col: newCol, fixed: newFixed,
         tel: telInput.value, email: emailInput.value,
         cpTotal: baseEmp.cpTotal || 25, prio: newPrio, taux: newTaux,
-        salaire: newSalaire, tauxHS: newTauxHS, primeCouv: newPrimeCouv,
+        salaire: newSalaire, tauxHS: newTauxHS, primeCouv: newPrimeCouv, entree: newEntree,
         inactif: statutChk.checked ? 1 : 0,
         contrats: (S.modal._contrats !== undefined)
           ? S.modal._contrats : (baseEmp.contrats || [])
@@ -11249,6 +11283,7 @@ function mEditEmp(box) {
         emp.taux    = newTaux;
         emp.salaire = newSalaire;
         emp.tauxHS  = newTauxHS;
+        emp.entree  = newEntree;
         emp.primeCouv = newPrimeCouv;
         emp.inactif = statutChk.checked ? 1 : 0;
         if (S.modal._contrats !== undefined) emp.contrats = S.modal._contrats;
