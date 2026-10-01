@@ -5468,7 +5468,7 @@ function dayHasDaily(year, month, day) {
    - CONTRAT  : salaire mensuel ÷ jours d'ouverture du mois, pour TOUS les
                 salariés sous contrat (présents ou non : ils sont payés)
                 + heures sup (au-delà du contrat) × taux HS, le jour où elles
-                sont faites
+                sont faites — seulement pour les contrats ≤ seuil HS (100 h)
    - EXTRA    : heures réelles (ou estimées) × taux horaire
    Le coefficient de charges s'applique au total. Retourne { cout, complet }.
    "complet" = true si tous les présents ont une rémunération définie.
@@ -5536,10 +5536,13 @@ function dayLaborCost(year, month, day) {
   }
 
   // Heures supplémentaires : chaque heure au-delà du contrat (congés
-  // déduits) coûte en plus, le jour où elle est faite.
+  // déduits) coûte en plus, le jour où elle est faite. Sauf contrats
+  // au-dessus du seuil (Paramètres, 100 h par défaut) : leur surplus
+  // rattrape les mois creux, il ne coûte rien de plus.
   ids.forEach(eid => {
     const e = findEmp(eid);
     if (!e || e.t === 'extra') return;
+    if ((contratH(e, year, month) || 0) > HS_SEUIL_CONTRAT) return;
     const hsJ = empHSJour(year, month, day, e);
     if (hsJ <= 0) return;
     const t = tauxHSEmp(e, year, month);
