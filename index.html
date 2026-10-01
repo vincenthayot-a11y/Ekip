@@ -7591,6 +7591,19 @@ let _lastSyncOk = false;
    comptable (régime LODEOM en Martinique → souvent < métropole). */
 let _chargesCoef = parseFloat(localStorage.getItem('charges_coef')) || 1.0;
 
+/* Réglages de paie enregistrés avec les données (donc synchronisés Drive). */
+function applyCfg(c) {
+  if (!c) return;
+  if (typeof c.chargesCoef === 'number' && c.chargesCoef > 0) {
+    _chargesCoef = c.chargesCoef;
+    try { localStorage.setItem('charges_coef', String(c.chargesCoef)); } catch (e) {}
+  }
+  if (typeof c.hsSeuil === 'number' && c.hsSeuil >= 0) {
+    HS_SEUIL_CONTRAT = c.hsSeuil;
+    try { localStorage.setItem('hs_seuil', String(c.hsSeuil)); } catch (e) {}
+  }
+}
+
 function isDriveConnected() { return !!GAS_URL; }
 
 /* Met à jour l'indicateur de statut de sauvegarde dans le header. */
@@ -7664,7 +7677,9 @@ function save() {
     const data = {
       pl: S.pl, ind: S.ind, cp: S.cp, mal: S.mal, pm: S.pm,
       notes: S.notes, dc: S.dc, real: S.real, daily: S.daily, closed: S.closed,
-      emps: S.emps, _ts: Date.now()
+      emps: S.emps,
+      cfg: { chargesCoef: _chargesCoef, hsSeuil: HS_SEUIL_CONTRAT },
+      _ts: Date.now()
     };
     // 1. Local toujours sauvegardé (instantané)
     try { localStorage.setItem('plan_v9', JSON.stringify(data)); } catch (e) { /* quota? */ }
@@ -7855,6 +7870,7 @@ function load() {
           if (d2.real)   S.real   = d2.real;
           if (d2.daily)  { S.daily = d2.daily; recalcAllDaily(); }
           if (d2.closed) S.closed = d2.closed;
+          applyCfg(d2.cfg);
           if (d2.emps && d2.emps[0] && d2.emps[0].col) {
             S.emps = d2.emps;
             _empsFromStorage = true;
@@ -7902,6 +7918,7 @@ function _loadFromLocal() {
       if (d.real)   S.real   = d.real;
       if (d.daily)  S.daily  = d.daily;
       if (d.closed) S.closed = d.closed;
+      applyCfg(d.cfg);
       if (d.emps && d.emps[0] && d.emps[0].col) {
         S.emps = d.emps;
         _empsFromStorage = true;
@@ -11870,12 +11887,47 @@ function rParametres() {
     if (isNaN(v) || v < 0) v = 100;
     HS_SEUIL_CONTRAT = v;
     localStorage.setItem('hs_seuil', String(v));
+    save();
     toast('Seuil HS enregistré : ' + v + 'h', 'ok');
   });
   seuilRow.appendChild(seuilInput);
   seuilRow.appendChild(seuilUnit);
   seuilRow.appendChild(seuilSave);
   secPaie.appendChild(seuilRow);
+
+  // Coefficient coût employeur (coût perso)
+  const coefDesc = document.createElement('p');
+  coefDesc.className = 'params-desc';
+  coefDesc.style.marginTop = '14px';
+  coefDesc.innerHTML = 'Coefficient coût employeur appliqué au brut dans le ' +
+    '<b>coût perso</b> : coût global ÷ salaire brut (charges patronales après ' +
+    'exonérations LODEOM, repas et transport compris). 1 = brut seul.';
+  secPaie.appendChild(coefDesc);
+  const coefRow = document.createElement('div');
+  coefRow.className = 'params-inline-row';
+  const coefInput = document.createElement('input');
+  coefInput.type = 'number';
+  coefInput.min = '1';
+  coefInput.step = '0.01';
+  coefInput.value = _chargesCoef;
+  coefInput.className = 'form-input--sm';
+  coefInput.style.maxWidth = '110px';
+  const coefUnit = document.createElement('span');
+  coefUnit.className = 'params-unit';
+  coefUnit.textContent = '× le brut';
+  const coefSave = mBtn('Enregistrer', true, () => {
+    let v = parseFloat(String(coefInput.value).replace(',', '.'));
+    if (isNaN(v) || v < 1) v = 1;
+    _chargesCoef = v;
+    localStorage.setItem('charges_coef', String(v));
+    save();
+    toast('Coefficient enregistré : × ' + v, 'ok');
+    render();
+  });
+  coefRow.appendChild(coefInput);
+  coefRow.appendChild(coefUnit);
+  coefRow.appendChild(coefSave);
+  secPaie.appendChild(coefRow);
   outer.appendChild(secPaie);
 
   // ── Assistant IA ────────────────────────────────────────────────────────
