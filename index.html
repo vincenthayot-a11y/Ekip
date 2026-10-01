@@ -14050,7 +14050,8 @@ function mAnnuel(box) {
   const descP = document.createElement('p');
   descP.className = 'annuel-desc';
   descP.textContent =
-    'Heures travaillées cumulées. Objectif = contrat mensuel × 12.';
+    'Jours et heures réellement saisis (pas le planning). ' +
+    'Objectif = heures de contrat de chaque mois.';
   box.appendChild(descP);
 
   const tblWrap = document.createElement('div');
@@ -14089,8 +14090,23 @@ function mAnnuel(box) {
   thead.appendChild(hrow);
   table.appendChild(thead);
 
+  // Jours / heures RÉELLEMENT saisis d'un salarié sur un mois
+  function reelMois(empId, m) {
+    const mr = S.real[year + '-' + String(m + 1).padStart(2, '0')] || {};
+    let j = 0, h = 0;
+    Object.keys(mr).forEach(d => {
+      const r = (mr[d] || {})[String(empId)];
+      if (r && r.total > 0) { j++; h += r.total / 60; }
+    });
+    return { j: j, h: h };
+  }
+
+  // Salariés partis sans aucune heure saisie dans l'année : non affichés
+  const empsAff = S.emps.filter(e => !e.inactif ||
+    [0,1,2,3,4,5,6,7,8,9,10,11].some(m => reelMois(e.id, m).j > 0));
+
   const tbody = document.createElement('tbody');
-  S.emps.forEach((e, idx) => {
+  empsAff.forEach((e, idx) => {
     const col = eColor(e.id);
     const isAlt = idx % 2 === 1;
     const tr = document.createElement('tr');
@@ -14110,15 +14126,15 @@ function mAnnuel(box) {
 
     let totalJ = 0, totalH = 0;
     for (let m = 0; m < 12; m++) {
-      const wj = workedDaysInMonth(e.id, year, m);
+      const rm = reelMois(e.id, m);
+      const wj = rm.j;
       totalJ += wj;
-      const monthH = workedHoursInMonth(e.id, year, m);
-      totalH += monthH;
+      totalH += rm.h;
 
-      // Détection mois futur sans données (pour afficher "—" au lieu de 0)
+      // Mois sans aucune saisie d'heures → "—" au lieu de 0
       const key = year + '-' + String(m + 1).padStart(2, '0');
-      const hasData = !!S.pl[key] && Object.keys(S.pl[key]).length > 0;
-      const isFuture = new Date(year, m, 1) > now && !hasData;
+      const hasData = !!S.real[key] && Object.keys(S.real[key]).length > 0;
+      const isFuture = !hasData;
 
       const td = document.createElement('td');
       td.className = 'annuel-month-cell';
@@ -14134,11 +14150,17 @@ function mAnnuel(box) {
     }
 
     totalH = Math.round(totalH * 10) / 10;
+    // Objectif = heures de contrat des mois déjà saisis (après l'entrée en
+    // contrat). Pas d'objectif pour un extra.
     let objectif = 0;
-    for (let mo = 0; mo < 12; mo++) objectif += contratH(e, year, mo);
+    for (let mo = 0; mo < 12; mo++) {
+      const k = year + '-' + String(mo + 1).padStart(2, '0');
+      if (e.t === 'extra' || !S.real[k] || !Object.keys(S.real[k]).length) continue;
+      objectif += contratH(e, year, mo) * partContratMois(e, year, mo);
+    }
     objectif = Math.round(objectif * 100) / 100;
     const diff = Math.round((totalH - objectif) * 10) / 10;
-    const pct = Math.min(100, Math.round(totalH / objectif * 100));
+    const pct = objectif ? Math.min(100, Math.round(totalH / objectif * 100)) : 0;
     const progressColor = pct >= 100 ? '#16a34a'
                         : pct >=  70 ? '#3b82f6'
                         : '#f59e0b';
@@ -14158,12 +14180,16 @@ function mAnnuel(box) {
 
     const tdO = document.createElement('td');
     tdO.className = 'annuel-sum-cell annuel-sum-cell--obj';
-    tdO.textContent = objectif + 'h';
+    tdO.textContent = objectif ? objectif + 'h' : '—';
 
     const tdD = document.createElement('td');
     tdD.className = 'annuel-sum-cell annuel-sum-cell--diff';
-    tdD.style.color = diff >= 0 ? '#16a34a' : '#dc2626';
-    tdD.textContent = (diff >= 0 ? '+' : '') + diff + 'h';
+    if (objectif) {
+      tdD.style.color = diff >= 0 ? '#16a34a' : '#dc2626';
+      tdD.textContent = (diff >= 0 ? '+' : '') + diff + 'h';
+    } else {
+      tdD.textContent = '—';
+    }
 
     tr.appendChild(tdJ);
     tr.appendChild(tdH);
