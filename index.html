@@ -5529,7 +5529,7 @@ function dayLaborCost(year, month, day) {
     const joursOuverts = dim(year, month) - fermes.length;
     S.emps.forEach(e => {
       if (e.t === 'extra' || !empSousContratMois(e, year, month)) return;
-      const sal = (e.salaire != null && e.salaire !== '') ? e.salaire : null;
+      const sal = salaireMoisEmp(e, year, month);
       if (sal == null) { complet = false; return; }
       if (joursOuverts > 0) cout += sal / joursOuverts;
     });
@@ -5543,11 +5543,12 @@ function dayLaborCost(year, month, day) {
     const e = findEmp(eid);
     if (!e || e.t === 'extra') return;
     if ((contratH(e, year, month) || 0) > HS_SEUIL_CONTRAT) return;
-    const hsJ = empHSJour(year, month, day, e);
-    if (hsJ <= 0) return;
-    const t = tauxHSEmp(e, year, month);
-    if (t == null) complet = false;
-    else cout += hsJ * t;
+    const hsAvant = empHSCumul(year, month, day - 1, e);
+    const hsApres = empHSCumul(year, month, day, e);
+    if (hsApres <= hsAvant) return;
+    const c = coutHeuresSup(e, year, month, hsAvant, hsApres);
+    if (c == null) complet = false;
+    else cout += c;
   });
 
   const coef = (typeof _chargesCoef === 'number' && _chargesCoef > 0)
@@ -5557,31 +5558,57 @@ function dayLaborCost(year, month, day) {
   return { cout: cout, heures: heures, complet: complet, nbPresents: ids.length };
 }
 
-/* Heures sup faites CE jour : on cumule les heures réelles du mois jour
-   après jour ; ce qui dépasse le contrat du mois (congés déduits) est de
-   l'heure sup, affectée au jour où le dépassement a lieu. */
-function empHSJour(year, month, day, e) {
+/* Heures sup CUMULÉES du mois jusqu'au jour inclus : ce qui dépasse le
+   contrat du mois (congés déduits). La différence entre deux jours donne
+   les heures sup faites ce jour-là. */
+function empHSCumul(year, month, day, e) {
+  if (day < 1) return 0;
   const contrat = contratAjuste(e, year, month);
   if (!contrat) return 0;
   const k = year + '-' + String(month + 1).padStart(2, '0');
   const mr = S.real[k] || {};
-  let avant = 0;
-  for (let d = 1; d < day; d++) {
+  let cumul = 0;
+  for (let d = 1; d <= day; d++) {
     const r = (mr[String(d)] || {})[String(e.id)];
-    if (r && r.total != null) avant += r.total / 60;
+    if (r && r.total != null) cumul += r.total / 60;
   }
-  const rj = (mr[String(day)] || {})[String(e.id)];
-  const hj = (rj && rj.total != null) ? rj.total / 60 : 0;
-  return Math.max(0, avant + hj - Math.max(contrat, avant));
+  return Math.max(0, cumul - contrat);
 }
 
-/* Coût d'une heure sup : taux HS de la fiche, sinon taux horaire du contrat
-   majoré de 25 %. null si ni l'un ni l'autre n'est connu. */
-function tauxHSEmp(e, year, month) {
-  if (e.tauxHS != null && e.tauxHS !== '') return e.tauxHS;
-  const sal = (e.salaire != null && e.salaire !== '') ? e.salaire : null;
-  const h = contratH(e, year, month);
-  return (sal != null && h) ? (sal / h) * 1.25 : null;
+/* Taux horaire brut d'un salarié. Contrat sans taux mais avec un ancien
+   salaire mensuel : salaire ÷ heures de contrat du mois. */
+function tauxHoraireEmp(e, year, month) {
+  if (e.taux != null && e.taux !== '') return e.taux;
+  if (e.t !== 'extra' && e.salaire != null && e.salaire !== '') {
+    const h = contratH(e, year, month);
+    return h ? e.salaire / h : null;
+  }
+  return null;
+}
+
+/* Salaire brut du mois d'un salarié sous contrat = taux horaire × heures
+   de contrat du mois (avenants compris). À défaut de taux, ancien salaire
+   mensuel saisi sur la fiche. */
+function salaireMoisEmp(e, year, month) {
+  if (e.taux != null && e.taux !== '') {
+    const h = contratH(e, year, month);
+    return h ? Math.round(e.taux * h * 100) / 100 : null;
+  }
+  return (e.salaire != null && e.salaire !== '') ? e.salaire : null;
+}
+
+/* Coût des heures en plus du contrat, de la hsDe-ième à la hsA-ième heure
+   du mois. Heures complémentaires (temps partiel) : +10 % jusqu'à 1/10 du
+   contrat, +25 % au-delà. Un taux HS saisi sur la fiche remplace ce calcul.
+   null si aucun taux n'est connu. */
+function coutHeuresSup(e, year, month, hsDe, hsA) {
+  if (hsA <= hsDe) return 0;
+  if (e.tauxHS != null && e.tauxHS !== '') return (hsA - hsDe) * e.tauxHS;
+  const base = tauxHoraireEmp(e, year, month);
+  if (base == null) return null;
+  const palier = 0.10 * (contratH(e, year, month) || 0);
+  const h110 = Math.max(0, Math.min(hsA, palier) - Math.min(hsDe, palier));
+  return base * (1.10 * h110 + 1.25 * (hsA - hsDe - h110));
 }
 
 /* Un salarié sous contrat est-il salarié de l'entreprise ce mois-là ?
@@ -5744,12 +5771,11 @@ function empHeuresSup(year, month, empId) {
   // ses heures sur les jours où il était absent.
   const contrat = contratAjuste(e, year, month);
   const hs = Math.max(0, real - contrat);
-  const taux = (e.tauxHS != null && e.tauxHS !== '') ? e.tauxHS : 0;
   // Au-delà du seuil : HS reportées en fin d'année → non payées mensuellement
   const payableMensuel = contrat <= HS_SEUIL_CONTRAT;
   return {
     hs: hs,
-    montant: payableMensuel ? hs * taux : 0,
+    montant: payableMensuel ? (coutHeuresSup(e, year, month, 0, hs) || 0) : 0,
     payableMensuel: payableMensuel
   };
 }
@@ -9149,9 +9175,8 @@ function rCaisse() {
     Object.keys(presentIds).forEach(eid => {
       const e = findEmp(parseInt(eid, 10));
       if (!e) return;
-      const aRemu = (e.t === 'extra')
-        ? (e.taux != null && e.taux !== '')
-        : (e.salaire != null && e.salaire !== '');
+      const aRemu = (e.taux != null && e.taux !== '') ||
+        (e.t !== 'extra' && e.salaire != null && e.salaire !== '');
       if (!aRemu) manquants.push(e);
     });
     if (!manquants.length) return;
@@ -10396,16 +10421,14 @@ function buildEmpsSections() {
 
       // Stats : heures contrat · salaire · priorité
       // Extra : payé à l'heure → on montre son taux horaire, pas un contrat.
-      const salTxt = isExtra
-        ? ((e.taux != null && e.taux !== '')
-            ? fmtEur(e.taux) + '/h'
-            : "<span class='emp-stat-val--missing'>à saisir</span>")
-        : ((e.salaire != null && e.salaire !== '')
-            ? fmtEur(e.salaire)
-            : "<span class='emp-stat-val--missing'>à saisir</span>");
-      const salClass = isExtra
-        ? ((e.taux != null && e.taux !== '') ? 'emp-stat-val' : '')
-        : ((e.salaire != null && e.salaire !== '') ? 'emp-stat-val' : '');
+      // Taux horaire brut (contrats et extras) ; ancien salaire mensuel
+      // affiché tant que le taux n'est pas saisi.
+      const aTaux = e.taux != null && e.taux !== '';
+      const aSalaire = !isExtra && e.salaire != null && e.salaire !== '';
+      const salTxt = aTaux ? fmtEur(e.taux) + '/h'
+        : aSalaire ? fmtEur(e.salaire)
+        : "<span class='emp-stat-val--missing'>à saisir</span>";
+      const salClass = (aTaux || aSalaire) ? 'emp-stat-val' : '';
       const prio = e.prio !== undefined ? e.prio : '—';
 
       const stats = document.createElement('div');
@@ -10418,7 +10441,7 @@ function buildEmpsSections() {
             (e.h || 0) + "h</div><div class='emp-stat-lbl'>Contrat</div></div>") +
         "<div class='emp-stat'><div class='" + salClass + "'>" + salTxt +
           "</div><div class='emp-stat-lbl'>" +
-          (isExtra ? 'Taux' : 'Salaire') + "</div></div>" +
+          (!aTaux && aSalaire ? 'Salaire' : 'Taux') + "</div></div>" +
         "<div class='emp-stat'><div class='emp-stat-val'>" + prio +
           "</div><div class='emp-stat-lbl'>Priorité</div></div>";
       card.appendChild(stats);
@@ -10798,14 +10821,6 @@ function mEditEmp(box) {
   remuTitle.textContent = '💶 Rémunération';
   form.appendChild(remuTitle);
 
-  // Salaire mensuel (contrats)
-  const salInput = makeInput(
-    baseEmp.salaire !== undefined && baseEmp.salaire !== null ? baseEmp.salaire : '',
-    'ex: 1800', 'number');
-  salInput.min = '0';
-  salInput.step = '0.01';
-  salInput.id = 'emp-salaire-input';
-
   // Montant horaire heures supplémentaires (contrats)
   const hsInput = makeInput(
     baseEmp.tauxHS !== undefined && baseEmp.tauxHS !== null ? baseEmp.tauxHS : '',
@@ -10814,27 +10829,48 @@ function mEditEmp(box) {
   hsInput.step = '0.01';
   hsInput.id = 'emp-tauxhs-input';
 
-  // Taux horaire (extras)
+  // Taux horaire brut (contrats et extras)
   const tauxInput = makeInput(
     baseEmp.taux !== undefined && baseEmp.taux !== null ? baseEmp.taux : '',
-    'ex: 12.50', 'number');
+    'ex: 12.02', 'number');
   tauxInput.min = '0';
   tauxInput.step = '0.01';
   tauxInput.id = 'emp-taux-input';
 
   const remuRow = document.createElement('div');
-  remuRow.className = 'form-grid-3';
-  remuRow.appendChild(field('Salaire mensuel (€)', salInput));
-  remuRow.appendChild(field('Montant h. supp. (€/h)', hsInput));
-  remuRow.appendChild(field('Taux horaire extra (€/h)', tauxInput));
+  remuRow.className = type === 'extra' ? 'form-grid-1' : 'form-grid-2';
+  remuRow.appendChild(field('Taux horaire brut (€/h)', tauxInput));
+  if (type !== 'extra') {
+    remuRow.appendChild(field('Taux h. sup. (€/h) — facultatif', hsInput));
+  }
   form.appendChild(remuRow);
 
   const remuHint = document.createElement('p');
   remuHint.className = 'form-hint';
   remuHint.style.marginTop = '4px';
-  remuHint.innerHTML = type === 'extra'
-    ? '➡ <b>Extra</b> : seul le <b>taux horaire</b> est utilisé (payé à l\'heure réelle).'
-    : '➡ <b>Contrat</b> : <b>salaire mensuel</b> fixe + <b>heures supp.</b> au-delà des heures contrat.';
+  const majHint = () => {
+    if (type === 'extra') {
+      remuHint.innerHTML = '➡ <b>Extra</b> : payé à l\'heure réelle × taux horaire.';
+      return;
+    }
+    const t = parseFloat(tauxInput.value);
+    const h = contratH(Object.assign({}, baseEmp, {
+      h: parseFloat(hoursInput.value) || baseEmp.h,
+      contrats: S.modal._contrats !== undefined ? S.modal._contrats : baseEmp.contrats
+    }), S.y, S.m);
+    let txt = '➡ <b>Contrat</b> : salaire du mois = taux × heures de contrat du mois ' +
+      '(avenants compris). Heures en plus : +10 % jusqu\'à 1/10 du contrat, +25 % au-delà, ' +
+      'sauf si un taux h. sup. est saisi.';
+    if (!isNaN(t) && h) {
+      txt += '<br>Ce mois-ci : ' + fmtEur(t * h) + ' brut (' + h + ' h × ' + fmtEur(t) + ').';
+    } else if (baseEmp.salaire != null && baseEmp.salaire !== '') {
+      txt += '<br>Ancien salaire mensuel : ' + fmtEur(baseEmp.salaire) +
+        ' — utilisé tant que le taux n\'est pas saisi.';
+    }
+    remuHint.innerHTML = txt;
+  };
+  majHint();
+  tauxInput.addEventListener('input', majHint);
   form.appendChild(remuHint);
 
   // ── Prime couvert ─────────────────────────────────────────────────────────
@@ -11134,7 +11170,9 @@ function mEditEmp(box) {
     const newCol  = eCol;
     const newPrio = Math.max(1, Math.min(99, parseInt(prioInput.value) || 50));
     const newTaux = tauxInput.value !== '' ? (parseFloat(tauxInput.value) || 0) : null;
-    const newSalaire = salInput.value !== '' ? (parseFloat(salInput.value) || 0) : null;
+    // Le taux horaire remplace l'ancien salaire mensuel dès qu'il est saisi
+    const newSalaire = (newTaux != null || type === 'extra') ? null
+      : (baseEmp.salaire != null && baseEmp.salaire !== '' ? baseEmp.salaire : null);
     const newTauxHS = hsInput.value !== '' ? (parseFloat(hsInput.value) || 0) : null;
     const newPrimeCouv = primeSel.value || 'aucune';
 
