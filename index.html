@@ -6164,7 +6164,7 @@ const SURPLUS_MAX = 0.20;
      • polyvalent : écart cuisine/salle ....... 3 / jour
      • poste « à éviter » (Jessica en Ouv.) ... 2
    ═══════════════════════════════════════════════════════════════════════════ */
-const APP_VERSION = '30 sept. 2026 — import historique CA';
+const APP_VERSION = '7 oct. 2026 — statut synchro + défilement';
 
 function optimiserPlanning(ctx) {
   const D = dim(S.y, S.m);
@@ -7635,7 +7635,10 @@ function applyCfg(c) {
 function isDriveConnected() { return !!GAS_URL; }
 
 /* Met à jour l'indicateur de statut de sauvegarde dans le header. */
+let _saveStatus = null; // dernier état connu, réaffiché après chaque render()
 function setSaveStatus(status) {
+  if (status) _saveStatus = status;
+  status = _saveStatus || (GAS_URL ? 'ok' : 'local');
   const el = document.getElementById('save-status');
   if (!el) return;
   if (status === 'saving') {
@@ -8006,6 +8009,7 @@ function render() {
   // horizontalement) pour la restaurer après reconstruction, tant qu'on
   // reste dans la même vue : une modification ne doit pas ramener en haut.
   const memeVue = render._vue === S.view && render._m === S.m && render._y === S.y;
+  const autreVue = render._vue !== undefined && render._vue !== S.view;
   const scrollY = window.scrollY || window.pageYOffset || 0;
   const zones = {};
   if (memeVue) {
@@ -8156,6 +8160,9 @@ function render() {
       if (el) { el.scrollLeft = zones[id][0]; el.scrollTop = zones[id][1]; }
     });
     if (scrollY) window.scrollTo(0, scrollY);
+  } else if (autreVue) {
+    // Changement d'onglet : on repart du haut de la page.
+    window.scrollTo(0, 0);
   }
 }
 
@@ -8556,6 +8563,7 @@ function rHdr() {
   saveStatusEl.innerHTML =
     '<span class="save-status--local">💾 Local</span>';
   actions.appendChild(saveStatusEl);
+  setTimeout(() => setSaveStatus(), 0);
 
   header.appendChild(actions);
   return header;
