@@ -3808,6 +3808,7 @@ input[type=number] {
 }
 .abs-icon--cp { background: #dcfce7; border: 1px solid #4ade80; }
 .abs-icon--mal { background: #ffe4e6; border: 1px solid #fda4af; }
+.abs-icon--abs { background: #e2e8f0; border: 1px solid #64748b; font-size: 7px; font-weight: 700; color: #334155; }
 .abs-icon--ind { background: #fef9c3; border: 1px solid #fde047; font-size: 10px; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -4159,7 +4160,7 @@ const _undoStack = [];
 
 function pushUndo() {
   const snap = JSON.stringify({
-    pl: S.pl, ind: S.ind, cp: S.cp, mal: S.mal, pm: S.pm,
+    pl: S.pl, ind: S.ind, cp: S.cp, mal: S.mal, pm: S.pm, abs: S.abs, absj: S.absj,
     notes: S.notes, dc: S.dc, real: S.real, daily: S.daily, closed: S.closed
   });
   _undoStack.push(snap);
@@ -4177,6 +4178,8 @@ function undo() {
   if (snap.cp)     S.cp     = snap.cp;
   if (snap.mal)    S.mal    = snap.mal;
   if (snap.pm)     S.pm     = snap.pm;
+  if (snap.abs)    S.abs    = snap.abs;
+  if (snap.absj)   S.absj   = snap.absj;
   if (snap.notes)  S.notes  = snap.notes;
   if (snap.dc)     S.dc     = snap.dc;
   if (snap.real)   S.real   = snap.real;
@@ -4419,6 +4422,8 @@ const S = {
   cp: {},      // congés payés     {moisKey: {empId: [jours]}}
   mal: {},     // arrêts maladie   {moisKey: {empId: [jours]}}
   pm: {},      // après-midi uniquement {moisKey: {empId: [jours]}}
+  abs: {},     // absences constatées {moisKey: {empId: [jours]}}
+  absj: {},    // parmi S.abs, jours justifiés {moisKey: {empId: [jours]}}
   notes: {},   // notes par jour   {moisKey: {jour: "texte"}}
   dc: {},      // config postes    {moisKey: {...}}
   real: {},    // heures réelles pointées {moisKey: {jour: {empId: {arr, dep, total, note}}}}
@@ -4557,6 +4562,10 @@ function getInd(empId)  { return ((S.ind[mk()]   || {})[empId] || []); }
 function getCp(empId)   { return ((S.cp[mk()]    || {})[empId] || []); }
 function getMal(empId)  { return ((S.mal[mk()]   || {})[empId] || []); }
 function getPm(empId)   { return ((S.pm[mk()]    || {})[empId] || []); }
+const ABS_TYPES = ['ind', 'cp', 'mal', 'pm', 'abs'];
+function getAbs(empId)  { return ((S.abs[mk()]   || {})[empId] || []); }
+function getAbsJ(empId) { return ((S.absj[mk()]  || {})[empId] || []); }
+function isAbsJustif(empId, day) { return getAbsJ(empId).indexOf(day) >= 0; }
 function getNote(day)   { return ((S.notes[mk()] || {})[day]   || ''); }
 
 /* Postes considérés comme "matin" (l'employé en PM-only ne peut pas y être placé)
@@ -4577,7 +4586,8 @@ function isPmOnly(empId, day) {
 function isAbsent(empId, day) {
   return getInd(empId).indexOf(day) >= 0
       || getCp(empId).indexOf(day)  >= 0
-      || getMal(empId).indexOf(day) >= 0;
+      || getMal(empId).indexOf(day) >= 0
+      || getAbs(empId).indexOf(day) >= 0;
 }
 
 /* Jour fermé (restaurant) : défini dans S.closed[mk] = [jours]. Aucune
@@ -4777,6 +4787,11 @@ function absIcon(empId, day) {
   }
   if (getMal(empId).indexOf(day) >= 0) {
     return '<span class="abs-icon abs-icon--mal" title="Maladie">🤒</span>';
+  }
+  if (getAbs(empId).indexOf(day) >= 0) {
+    return isAbsJustif(empId, day)
+      ? '<span class="abs-icon abs-icon--abs" title="Absence justifiée">AJ</span>'
+      : '<span class="abs-icon abs-icon--abs" title="Absence injustifiée">AN</span>';
   }
   if (getInd(empId).indexOf(day) >= 0) {
     return '<span class="abs-icon abs-icon--ind" ' +
@@ -5104,6 +5119,9 @@ function diagnoseSlot(d, pc) {
       reasons.push({ icon: '🌴', txt: 'Congé payé', fixable: false });
     } else if (getMal(e.id).indexOf(d) >= 0) {
       reasons.push({ icon: '🤒', txt: 'Arrêt maladie', fixable: false });
+    } else if (getAbs(e.id).indexOf(d) >= 0) {
+      reasons.push({ icon: '🚫', txt: isAbsJustif(e.id, d)
+        ? 'Absence justifiée' : 'Absence injustifiée', fixable: false });
     } else if (getInd(e.id).indexOf(d) >= 0) {
       reasons.push({ icon: '⚠', txt: 'Indisponibilité souhaitée',
         fixable: true, fix: "Retirer l'indisponibilité" });
@@ -5652,7 +5670,8 @@ function empSousContratMois(e, year, month) {
     Object.values(S.real[k] || {}).some(j => j && j[id] && j[id].total > 0) ||
     Object.values(S.daily[k] || {}).some(j => j && j.serveurs && j.serveurs[id]) ||
     ((S.cp[k] || {})[id] || []).length > 0 ||
-    ((S.mal[k] || {})[id] || []).length > 0;
+    ((S.mal[k] || {})[id] || []).length > 0 ||
+    ((S.abs[k] || {})[id] || []).length > 0;
   return aTrace;
 }
 
@@ -7017,6 +7036,7 @@ function autoGen(mode) {
       // Bloquer uniquement CP et maladie (pas indisponible souhaité ni pm)
       if ((S.cp[mk()] || {})[e.id] && (S.cp[mk()][e.id] || []).indexOf(d) >= 0) return false;
       if ((S.mal[mk()] || {})[e.id] && (S.mal[mk()][e.id] || []).indexOf(d) >= 0) return false;
+      if (getAbs(e.id).indexOf(d) >= 0) return false;
       // Vérifier section/postes autorisés
       const isCuisinePost = POSTES_CUISINE.some(p => p.c === postCode);
       if (isCuisinePost) {
@@ -7510,18 +7530,20 @@ function exportCsv() {
 function exportRecap() {
   const D = dim(S.y, S.m);
   const maxDays = D >= 31 ? RL.mj31 : RL.mj30;
-  const rows = ['Employe,Section,Type,Jours,Max,Heures,Contrat,Ecart,CP,Maladie'];
+  const rows = ['Employe,Section,Type,Jours,Max,Heures,Contrat,Ecart,CP,Maladie,Absences,Abs. injustifiees'];
   S.emps.forEach(e => {
     const wj = workedDays(e.id);
     const hw = workedHours(e.id);
     const diff = Math.round((hw - contratDuNow(e)) * 10) / 10;
     const cpd = getCp(e.id).length;
     const mald = getMal(e.id).length;
+    const absd = getAbs(e.id).length;
+    const absi = getAbs(e.id).filter(d => !isAbsJustif(e.id, d)).length;
     rows.push([
       e.n, e.s === 'cuisine' ? 'Cuisine' : 'Salle',
       (e.t || 'contrat') === 'extra' ? 'Extra' : 'Contrat',
       wj, maxDays, hw, contratDuNow(e),
-      (diff >= 0 ? '+' : '') + diff, cpd, mald
+      (diff >= 0 ? '+' : '') + diff, cpd, mald, absd, absi
     ].map(csvEsc).join(','));
   });
   openDl(rows.join('\n'),
@@ -7706,7 +7728,7 @@ function gasRequest(url, method, body, callback) {
 function save() {
   try {
     const data = {
-      pl: S.pl, ind: S.ind, cp: S.cp, mal: S.mal, pm: S.pm,
+      pl: S.pl, ind: S.ind, cp: S.cp, mal: S.mal, pm: S.pm, abs: S.abs, absj: S.absj,
       notes: S.notes, dc: S.dc, real: S.real, daily: S.daily, closed: S.closed,
       emps: S.emps,
       cfg: { chargesCoef: _chargesCoef, hsSeuil: HS_SEUIL_CONTRAT },
@@ -7896,6 +7918,8 @@ function load() {
           if (d2.cp)     S.cp     = d2.cp;
           if (d2.mal)    S.mal    = d2.mal;
           if (d2.pm)     S.pm     = d2.pm;
+          if (d2.abs)    S.abs    = d2.abs;
+          if (d2.absj)   S.absj   = d2.absj;
           if (d2.notes)  S.notes  = d2.notes;
           if (d2.dc)     S.dc     = d2.dc;
           if (d2.real)   S.real   = d2.real;
@@ -7915,7 +7939,7 @@ function load() {
           // Mise à jour du cache local avec le TS Drive
           try {
             localStorage.setItem('plan_v9', JSON.stringify({
-              pl: S.pl, ind: S.ind, cp: S.cp, mal: S.mal, pm: S.pm,
+              pl: S.pl, ind: S.ind, cp: S.cp, mal: S.mal, pm: S.pm, abs: S.abs, absj: S.absj,
               notes: S.notes, dc: S.dc, real: S.real, daily: S.daily, closed: S.closed,
               emps: S.emps, _ts: driveTs
             }));
@@ -7944,6 +7968,8 @@ function _loadFromLocal() {
       if (d.cp)     S.cp     = d.cp;
       if (d.mal)    S.mal    = d.mal;
       if (d.pm)     S.pm     = d.pm;
+      if (d.abs)    S.abs    = d.abs;
+      if (d.absj)   S.absj   = d.absj;
       if (d.notes)  S.notes  = d.notes;
       if (d.dc)     S.dc     = d.dc;
       if (d.real)   S.real   = d.real;
@@ -8706,6 +8732,7 @@ function rHeures() {
     "(clic pour modifier)</span>" +
     "<span><b style='color:#16a34a'>CP</b> congé · " +
     "<b style='color:#e11d48'>M</b> maladie · " +
+    "<b style='color:#475569'>AJ</b>/<b style='color:#9f1239'>AN</b> absence justifiée/non · " +
     "<b style='color:#f59e0b'>I</b> indispo</span>" +
     "<span><b style='color:#1d4ed8'>S</b>/<b style='color:#c2410c'>C</b> " +
     "= section travaillée (polyvalents, clic pour basculer)</span>";
@@ -8811,6 +8838,7 @@ function rHeures() {
       const closed = isClosed(d);
       const cp  = getCp(e.id).indexOf(d) >= 0;
       const mal = getMal(e.id).indexOf(d) >= 0;
+      const abs = getAbs(e.id).indexOf(d) >= 0;
       const ind = getInd(e.id).indexOf(d) >= 0;
       const rh  = realHours(d, e.id);
 
@@ -8821,6 +8849,10 @@ function rHeures() {
         td.innerHTML = "<b style='color:#16a34a'>CP</b>";
       } else if (mal) {
         td.innerHTML = "<b style='color:#e11d48'>M</b>";
+      } else if (abs) {
+        td.innerHTML = isAbsJustif(e.id, d)
+          ? "<b style='color:#475569' title='Absence justifiée'>AJ</b>"
+          : "<b style='color:#9f1239' title='Absence injustifiée'>AN</b>";
       } else if (ind && rh == null) {
         td.style.cursor = 'pointer';
         td.innerHTML = "<span style='color:#f59e0b'>I</span>";
@@ -8830,7 +8862,7 @@ function rHeures() {
 
       // Saisie inline : un champ éditable dans la cellule (sauf jours
       // fermés / congé / maladie)
-      if (!closed && !cp && !mal) {
+      if (!closed && !cp && !mal && !abs) {
         const inp = document.createElement('input');
         inp.type = 'text';
         inp.inputMode = 'decimal';
@@ -9897,6 +9929,8 @@ function rRecap() {
     const diff = Math.round((hoursWorked - cH) * 10) / 10;
     const cpDays  = getCp (e.id).filter(d => d >= 1 && d <= D).length;
     const malDays = getMal(e.id).filter(d => d >= 1 && d <= D).length;
+    const absDays = getAbs(e.id).filter(d => d >= 1 && d <= D).length;
+    const absNJ   = getAbs(e.id).filter(d => d >= 1 && d <= D && !isAbsJustif(e.id, d)).length;
     const alerts = legalAlerts(e.id);
     const isExtra = (e.t || 'contrat') === 'extra';
     const col = eColor(e.id);
@@ -9958,12 +9992,14 @@ function rRecap() {
           (cpDays  || '—') + '</td>' +
         '<td class="recap-td" style="color:#f59e0b">' +
           (malDays || '—') + '</td>' +
+        '<td class="recap-td" style="color:#475569" title="dont non justifiées : ' + absNJ + '">' +
+          (absDays ? absDays + (absNJ ? ' <span style="color:#9f1239">(' + absNJ + ' NJ)</span>' : '') : '—') + '</td>' +
       '</tr>';
   });
 
   const headerTitles = [
     'Employé', 'Section', 'Type', 'Jours', 'Max',
-    'Progression', 'Heures', 'Contrat', 'Écart', 'CP', 'Mal.'
+    'Progression', 'Heures', 'Contrat', 'Écart', 'CP', 'Mal.', 'Abs.'
   ];
   const headerHtml = headerTitles.map((t, i) =>
     '<th class="recap-th' + (i === 0 ? ' recap-th--first' : '') +
@@ -11306,7 +11342,7 @@ function mEditEmp(box) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MODAL — Absences / indisponibilités (3 types : ind, cp, mal)
+   MODAL — Absences / indisponibilités (types : ind, cp, mal, pm, abs)
    ───────────────────────────────────────────────────────────────────────────
    Grille employés × jours. Chaque cellule cliquable toggle l'absence.
    - Auto-init : les "extras" sont marqués indisponibles sur tout le mois
@@ -11360,8 +11396,29 @@ function mIndispos(box) {
         if (!S.pm[k][eid]) S.pm[k][eid] = [];
         return S.pm[k][eid];
       }
+    },
+    abs: {
+      label: 'Absence', color: '#64748b', bg: '#e2e8f0',
+      arr: (k, eid) => {
+        if (!S.abs[k]) S.abs[k] = {};
+        if (!S.abs[k][eid]) S.abs[k][eid] = [];
+        return S.abs[k][eid];
+      }
     }
   };
+  // Absence : mode de pose (justifiée ou non), mémorisé le temps de la modal
+  const absJustif = S.modal.absJ !== false;
+  function absjArr(k, eid) {
+    if (!S.absj[k]) S.absj[k] = {};
+    if (!S.absj[k][eid]) S.absj[k][eid] = [];
+    return S.absj[k][eid];
+  }
+  function setAbsJ(k, eid, day, on) {
+    const a = absjArr(k, eid);
+    const i = a.indexOf(day);
+    if (on && i < 0) a.push(day);
+    if (!on && i >= 0) a.splice(i, 1);
+  }
 
   // Auto-init des extras : tous les jours du mois marqués indisponibles
   S.emps.forEach(e => {
@@ -11389,7 +11446,8 @@ function mIndispos(box) {
       getInd(e.id).filter(d => d >= 1 && d <= D).length > 0 ||
       getCp(e.id).length > 0 ||
       getMal(e.id).length > 0 ||
-      getPm(e.id).length > 0
+      getPm(e.id).length > 0 ||
+      getAbs(e.id).length > 0
     );
   }
 
@@ -11448,6 +11506,34 @@ function mIndispos(box) {
   typeRow.appendChild(filterRow);
   box.appendChild(typeRow);
 
+  if (absType === 'abs') {
+    const jRow = document.createElement('div');
+    jRow.style.cssText = 'display:flex;gap:6px;align-items:center;' +
+      'font-size:12px;color:#6b7280;margin:0 4px 8px';
+    jRow.appendChild(document.createTextNode('Poser en :'));
+    [[true, 'J — Justifiée', '#cbd5e1', '#334155'],
+     [false, 'N — Injustifiée', '#fda4af', '#9f1239']].forEach(o => {
+      const b = document.createElement('button');
+      b.className = 'abs-filter-btn';
+      const act = absJustif === o[0];
+      b.style.border = '1.5px solid ' + (act ? o[3] : '#e5e7eb');
+      b.style.background = act ? o[2] : '#fff';
+      b.style.color = act ? o[3] : '#9ca3af';
+      b.style.fontWeight = act ? '700' : '400';
+      b.textContent = o[1];
+      b.onclick = () => {
+        S.modal.absJ = o[0];
+        const curBox = document.querySelector('.mo');
+        if (curBox) { curBox.innerHTML = ''; mIndispos(curBox); }
+      };
+      jRow.appendChild(b);
+    });
+    const hint = document.createElement('span');
+    hint.textContent = '· cliquer une absence existante bascule son statut';
+    jRow.appendChild(hint);
+    box.appendChild(jRow);
+  }
+
   // ── Comptes de jours absents par colonne (pour le pied de tableau) ─────
   /* Pose ou retire une absence sur un jour. Retourne le mode appliqué
      ('add' ou 'remove') pour que le glissement reste cohérent. */
@@ -11455,25 +11541,29 @@ function mIndispos(box) {
     const k = mk();
     const arr3 = curType.arr(k, eid);
     const ix = arr3.indexOf(day);
+    // Absence déjà posée mais avec l'autre statut : on bascule le statut
+    if (!forceMode && absType === 'abs' && ix >= 0 &&
+        (absjArr(k, eid).indexOf(day) >= 0) !== absJustif) {
+      setAbsJ(k, eid, day, absJustif);
+      return 'add';
+    }
     const mode = forceMode || (ix >= 0 ? 'remove' : 'add');
     if (mode === 'remove') {
       if (ix >= 0) arr3.splice(ix, 1);
-    } else if (ix < 0) {
+      if (absType === 'abs') setAbsJ(k, eid, day, false);
+    } else {
       // Exclusivité : ce jour sort des autres types d'absence
-      if (!S.ind[k]) S.ind[k] = {};
-      if (!S.cp[k])  S.cp[k]  = {};
-      if (!S.mal[k]) S.mal[k] = {};
-      if (!S.pm[k])  S.pm[k]  = {};
-      ['ind', 'cp', 'mal', 'pm'].forEach(t => {
+      ABS_TYPES.forEach(t => {
         if (t === absType) return;
-        const tgt = (t === 'ind' ? S.ind : t === 'cp' ? S.cp
-          : t === 'mal' ? S.mal : S.pm);
-        if (tgt[k][eid]) {
-          const i = tgt[k][eid].indexOf(day);
-          if (i >= 0) tgt[k][eid].splice(i, 1);
+        const tgt = (S[t][k] || {})[eid];
+        if (tgt) {
+          const i = tgt.indexOf(day);
+          if (i >= 0) tgt.splice(i, 1);
         }
       });
-      arr3.push(day);
+      if (absType !== 'abs') setAbsJ(k, eid, day, false);
+      if (ix < 0) arr3.push(day);
+      if (absType === 'abs') setAbsJ(k, eid, day, absJustif);
     }
     return mode;
   }
@@ -11599,29 +11689,17 @@ function mIndispos(box) {
       // Mutuelle exclusivité : si on active des jours d'un type,
       // on retire ces mêmes jours de tous les autres types.
       if (nArr.length) {
-        if (!S.ind[k]) S.ind[k] = {};
-        if (!S.cp[k])  S.cp[k]  = {};
-        if (!S.mal[k]) S.mal[k] = {};
-        if (!S.pm[k])  S.pm[k]  = {};
-        const otherTypes = ['ind','cp','mal','pm'].filter(t => t !== absType);
-        otherTypes.forEach(t => {
-          const tgt = (t === 'ind' ? S.ind : t === 'cp' ? S.cp : t === 'mal' ? S.mal : S.pm);
-          if (tgt[k][eid]) {
-            tgt[k][eid] = tgt[k][eid].filter(d => nArr.indexOf(d) < 0);
+        ABS_TYPES.filter(t => t !== absType).forEach(t => {
+          if (S[t][k] && S[t][k][eid]) {
+            S[t][k][eid] = S[t][k][eid].filter(d => nArr.indexOf(d) < 0);
           }
         });
       }
-      if (absType === 'ind') {
-        S.ind[k][eid] = nArr;
-      } else if (absType === 'cp') {
-        if (!S.cp[k]) S.cp[k] = {};
-        S.cp[k][eid] = nArr;
-      } else if (absType === 'mal') {
-        if (!S.mal[k]) S.mal[k] = {};
-        S.mal[k][eid] = nArr;
-      } else if (absType === 'pm') {
-        if (!S.pm[k]) S.pm[k] = {};
-        S.pm[k][eid] = nArr;
+      if (!S[absType][k]) S[absType][k] = {};
+      S[absType][k][eid] = nArr;
+      if (absType === 'abs' || nArr.length) {
+        absjArr(k, eid);
+        S.absj[k][eid] = (absType === 'abs' && absJustif) ? nArr.slice() : [];
       }
       save();
       innerRerender();
@@ -11644,6 +11722,14 @@ function mIndispos(box) {
       cell.style.color = on ? '#374151' : 'transparent';
       cell.style.cursor = (cw || on) ? 'pointer' : 'default';
       if (on) cell.textContent = '×';
+      if (on && absType === 'abs') {
+        const j = isAbsJustif(e.id, d);
+        cell.style.background = j ? '#cbd5e1' : '#fda4af';
+        cell.style.color = j ? '#334155' : '#9f1239';
+        cell.style.fontWeight = '700';
+        cell.textContent = j ? 'J' : 'N';
+        cell.title = j ? 'Absence justifiée' : 'Absence injustifiée';
+      }
 
       if (cw || on) {
         cell.dataset.eid = e.id;
@@ -11735,19 +11821,9 @@ function mIndispos(box) {
   const clearBtn = mBtn('🗑 Tout effacer ce type', false, () => {
     const k = mk();
     emps.forEach(e => {
-      if (absType === 'ind') {
-        if (!S.ind[k]) S.ind[k] = {};
-        S.ind[k][e.id] = [];
-      } else if (absType === 'cp') {
-        if (!S.cp[k]) S.cp[k] = {};
-        S.cp[k][e.id] = [];
-      } else if (absType === 'mal') {
-        if (!S.mal[k]) S.mal[k] = {};
-        S.mal[k][e.id] = [];
-      } else if (absType === 'pm') {
-        if (!S.pm[k]) S.pm[k] = {};
-        S.pm[k][e.id] = [];
-      }
+      if (!S[absType][k]) S[absType][k] = {};
+      S[absType][k][e.id] = [];
+      if (absType === 'abs' && S.absj[k]) S.absj[k][e.id] = [];
     });
     save();
     innerRerender();
@@ -14322,7 +14398,7 @@ function mPlanIndiv(box) {
   box.appendChild(lead);
 
   const liste = S.emps.filter(e => !e.inactif && (workedDays(e.id) > 0 ||
-    getCp(e.id).length || getMal(e.id).length));
+    getCp(e.id).length || getMal(e.id).length || getAbs(e.id).length));
   const coches = {};
   const wrap = document.createElement('div');
   wrap.style.cssText = 'max-height:55vh;overflow:auto;border:1px solid var(--border);border-radius:10px';
@@ -14392,12 +14468,13 @@ function exportParEmploye(ids) {
       const cpDay  = getCp (e.id).indexOf(d) >= 0;
       const malDay = getMal(e.id).indexOf(d) >= 0;
       const indDay = getInd(e.id).indexOf(d) >= 0;
+      const absDay = getAbs(e.id).indexOf(d) >= 0;
       const note = getNote(d);
 
       jours.push({
         d: d, w: w, we: isWeekend, tod: isToday,
         poste: posteName, posteCode: poste ? poste.c : null,
-        posteBg: posteBg, cp: cpDay, mal: malDay, ind: indDay, note: note
+        posteBg: posteBg, cp: cpDay, mal: malDay, ind: indDay, abs: absDay, note: note
       });
     }
 
@@ -14520,6 +14597,8 @@ function exportParEmploye(ids) {
         h.push("<div class='cp'>CP</div>");
       } else if (j.mal) {
         h.push("<div class='mal'>Maladie</div>");
+      } else if (j.abs) {
+        h.push("<div class='mal'>Absence</div>");
       } else if (j.ind) {
         h.push("<div class='ind'>Indispo</div>");
       } else if (j.poste) {
@@ -17473,6 +17552,11 @@ function executeActions(actions) {
               tgt[k][ae.id] = tgt[k][ae.id].filter(d => days.indexOf(d) < 0);
             }
           });
+          ['abs', 'absj'].forEach(t => {
+            if (S[t][k] && S[t][k][ae.id]) {
+              S[t][k][ae.id] = S[t][k][ae.id].filter(d => days.indexOf(d) < 0);
+            }
+          });
 
           // Dispatch vers la bonne collection selon le type
           if (a.action === 'cp') {
@@ -17527,6 +17611,11 @@ function executeActions(actions) {
         if (S.pm[k][re.id]) {
           S.pm[k][re.id]  = S.pm[k][re.id].filter(d => days.indexOf(d) < 0);
         }
+        ['abs', 'absj'].forEach(t => {
+          if (S[t][k] && S[t][k][re.id]) {
+            S[t][k][re.id] = S[t][k][re.id].filter(d => days.indexOf(d) < 0);
+          }
+        });
         done.push('✓ Absence supprimée pour ' + re.n +
           ' : j.' + days.join(', '));
       }
