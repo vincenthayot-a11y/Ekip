@@ -7467,8 +7467,8 @@ function printPlanning() {
       return '<td class="on nom" style="background:' + c.bg + ';color:' + c.text +
         '">' + esc(eName(eid)) + '</td>';
     }
-    // Poste ouvert ce jour mais non pourvu : case encadrée vide ; sinon rien
-    return actifs.indexOf(p.c) >= 0 ? '<td class="on"></td>' : '<td></td>';
+    // Poste non pourvu : case vide, sans cadre
+    return '<td></td>';
   };
 
   for (let d = 1; d <= D; d++) {
