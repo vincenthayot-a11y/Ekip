@@ -4630,6 +4630,10 @@ function eName(empId) {
   return e ? e.n : '?';
 }
 
+function eColorById(colId) {
+  for (let i = 0; i < ECOLS.length; i++) if (ECOLS[i].id === colId) return ECOLS[i];
+  return ECOLS[0];
+}
 function eColor(empId) {
   const e = findEmp(empId);
   const fallback = { bg: '#f1f5f9', text: '#374151' };
@@ -7446,10 +7450,20 @@ function printPlanning() {
     const lum = (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]);
     return { bg: 'rgb(' + m.join(',') + ')', text: lum < 140 ? '#fff' : '#111' };
   };
+  // Couleur d'impression choisie dans la fiche salarié (pbg / ptx), sinon automatique
+  const couleurImpr = (eid) => {
+    const e = findEmp(eid);
+    if (e && e.pbg) {
+      const m = hex(e.pbg);
+      const lum = (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]);
+      return { bg: e.pbg, text: e.ptx || (lum < 140 ? '#fff' : '#111') };
+    }
+    return franche(eColor(eid));
+  };
   const cellule = (d, p, actifs) => {
     const eid = getSlot(d, p.c);
     if (eid !== null) {
-      const c = franche(eColor(eid));
+      const c = couleurImpr(eid);
       return '<td class="on nom" style="background:' + c.bg + ';color:' + c.text +
         '">' + esc(eName(eid)) + '</td>';
     }
@@ -10730,6 +10744,52 @@ function mEditEmp(box) {
   colorDiv.appendChild(picker);
   form.appendChild(colorDiv);
 
+  // ── Couleur à l'impression (fond + texte) ───────────────────────────────
+  if (S.modal._pbg === undefined) S.modal._pbg = baseEmp.pbg || '';
+  if (S.modal._ptx === undefined) S.modal._ptx = baseEmp.ptx || '';
+  const printDiv = document.createElement('div');
+  printDiv.innerHTML = "<div class='lbl'>Couleur à l'impression</div>";
+  const printRow = document.createElement('div');
+  printRow.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap';
+  const apercu = document.createElement('span');
+  apercu.style.cssText = 'display:inline-block;min-width:110px;padding:5px 10px;' +
+    'border:1px solid #9ca3af;font-weight:700;text-align:center;font-size:13px';
+  const pbgIn = document.createElement('input');
+  pbgIn.type = 'color'; pbgIn.id = 'emp-pbg';
+  const ptxIn = document.createElement('input');
+  ptxIn.type = 'color'; ptxIn.id = 'emp-ptx';
+  const autoChk = document.createElement('input');
+  autoChk.type = 'checkbox'; autoChk.id = 'emp-pauto';
+  const autoLbl = document.createElement('label');
+  autoLbl.htmlFor = 'emp-pauto';
+  autoLbl.textContent = 'Automatique (d\'après la couleur ci-dessus)';
+  autoLbl.style.fontSize = '12px';
+  const majApercu = () => {
+    const auto = !S.modal._pbg;
+    autoChk.checked = auto;
+    pbgIn.disabled = auto; ptxIn.disabled = auto;
+    pbgIn.value = S.modal._pbg || '#ffffff';
+    ptxIn.value = S.modal._ptx || '#111111';
+    apercu.textContent = nameInput.value || 'Aperçu';
+    apercu.style.background = auto ? eColorById(eCol).bg : S.modal._pbg;
+    apercu.style.color = auto ? eColorById(eCol).text : (S.modal._ptx || '#111111');
+  };
+  pbgIn.oninput = () => { S.modal._pbg = pbgIn.value; majApercu(); };
+  ptxIn.oninput = () => { S.modal._ptx = ptxIn.value; majApercu(); };
+  autoChk.onchange = () => {
+    if (autoChk.checked) { S.modal._pbg = ''; S.modal._ptx = ''; }
+    else { S.modal._pbg = '#ffffff'; S.modal._ptx = '#111111'; }
+    majApercu();
+  };
+  const lblFond = document.createElement('span'); lblFond.textContent = 'Fond';
+  lblFond.style.fontSize = '12px';
+  const lblTexte = document.createElement('span'); lblTexte.textContent = 'Texte';
+  lblTexte.style.fontSize = '12px';
+  [apercu, lblFond, pbgIn, lblTexte, ptxIn, autoChk, autoLbl].forEach(x => printRow.appendChild(x));
+  printDiv.appendChild(printRow);
+  form.appendChild(printDiv);
+  setTimeout(majApercu, 0);
+
   // ── Heures mensuelles + CP annuels + Priorité ───────────────────────────
   const hoursInput = makeInput(tmpH, '', 'number');
   hoursInput.min = '1';
@@ -11301,6 +11361,7 @@ function mEditEmp(box) {
         jt: newJt, jours: newJours, r: newR, rs: newRs,
         ec: newEc ? 1 : 0, col: newCol, fixed: newFixed,
         tel: telInput.value, email: emailInput.value,
+        pbg: S.modal._pbg || undefined, ptx: S.modal._pbg ? (S.modal._ptx || undefined) : undefined,
         cpTotal: baseEmp.cpTotal || 25, prio: newPrio, taux: newTaux,
         salaire: newSalaire, tauxHS: newTauxHS, primeCouv: newPrimeCouv, entree: newEntree,
         inactif: statutChk.checked ? 1 : 0,
@@ -11323,6 +11384,8 @@ function mEditEmp(box) {
         emp.fixed   = newFixed;
         emp.tel     = telInput.value;
         emp.email   = emailInput.value;
+        if (S.modal._pbg) { emp.pbg = S.modal._pbg; emp.ptx = S.modal._ptx || '#111111'; }
+        else { delete emp.pbg; delete emp.ptx; }
         emp.prio    = newPrio;
         emp.taux    = newTaux;
         emp.salaire = newSalaire;
