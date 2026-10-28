@@ -7545,7 +7545,7 @@ function exportRecap() {
   const D = dim(S.y, S.m);
   const maxDays = D >= 31 ? RL.mj31 : RL.mj30;
   const rows = ['Employe,Section,Type,Jours,Max,Heures,Contrat,Ecart,CP,Maladie,Absences,Abs. injustifiees'];
-  S.emps.forEach(e => {
+  S.emps.filter(e => !e.inactif || workedDays(e.id) > 0).forEach(e => {
     const wj = workedDays(e.id);
     const hw = workedHours(e.id);
     const diff = Math.round((hw - contratDuNow(e)) * 10) / 10;
@@ -9888,9 +9888,12 @@ function rRecap() {
   const fillRate = totalSlots ? Math.round(filledSlots / totalSlots * 100) : 0;
   const emptyCount = totalSlots - filledSlots;
 
+  // Salariés affichés : les partis n'apparaissent que s'ils sont planifiés ce mois
+  const recapEmps = S.emps.filter(e => !e.inactif || workedDays(e.id) > 0);
+
   // Employés en dépassement / sous leur contrat
   let overContract = 0, underContract = 0, withAlerts = 0;
-  S.emps.forEach(e => {
+  recapEmps.forEach(e => {
     const h = workedHours(e.id);
     if (h > contratDuNow(e) * 1.05) overContract++;
     else if (h < contratDuNow(e) * 0.7 && workedDays(e.id) > 0) underContract++;
@@ -9935,7 +9938,7 @@ function rRecap() {
 
   // Construction des lignes employé (HTML concaténé pour vitesse)
   let rowsHtml = '';
-  S.emps.forEach((e, i) => {
+  recapEmps.forEach((e, i) => {
     const daysWorked = workedDays(e.id);
     const hoursWorked = workedHours(e.id);
     const cH = contratDuNow(e);
